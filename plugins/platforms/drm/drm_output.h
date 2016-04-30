@@ -111,6 +111,7 @@ Q_SIGNALS:
     void dpmsChanged();
 
 private:
+    friend class RemoteAccessManager;
     friend class DrmBackend;
     friend class DrmCrtc;   // TODO: For use of setModeLegacy. Remove later when we allow multiple connectors per crtc
                             //       and save the connector ids in the DrmCrtc instance.

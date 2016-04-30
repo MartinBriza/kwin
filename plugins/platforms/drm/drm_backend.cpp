@@ -102,6 +102,7 @@ DrmBackend::~DrmBackend()
 
 void DrmBackend::init()
 {
+    qCInfo(KWIN_DRM) << "Initializing DRM backend";
     LogindIntegration *logind = LogindIntegration::self();
     auto takeControl = [logind, this]() {
         if (logind->hasSessionControl()) {
@@ -748,3 +749,4 @@ QVector<CompositingType> DrmBackend::supportedCompositors() const
 }
 
 }
+
