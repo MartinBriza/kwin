@@ -104,9 +104,9 @@ void AbstractClient::updateMouseGrab()
 {
 }
 
-bool AbstractClient::belongToSameApplication(const AbstractClient *c1, const AbstractClient *c2, bool active_hack)
+bool AbstractClient::belongToSameApplication(const AbstractClient *c1, const AbstractClient *c2, SameApplicationChecks checks)
 {
-    return c1->belongsToSameApplication(c2, active_hack);
+    return c1->belongsToSameApplication(c2, checks);
 }
 
 bool AbstractClient::isTransient() const
@@ -153,7 +153,6 @@ void AbstractClient::setSkipPager(bool b)
         return;
     m_skipPager = b;
     doSetSkipPager();
-    info->setState(b ? NET::SkipPager : NET::States(0), NET::SkipPager);
     updateWindowRules(Rules::SkipPager);
     emit skipPagerChanged();
 }
@@ -1152,7 +1151,7 @@ bool AbstractClient::isActiveFullScreen() const
     // according to NETWM spec implementation notes suggests
     // "focused windows having state _NET_WM_STATE_FULLSCREEN" to be on the highest layer.
     // we'll also take the screen into account
-    return ac && (ac == this || ac->screen() != screen());
+    return ac && (ac == this || ac->screen() != screen()|| ac->allMainClients().contains(const_cast<AbstractClient*>(this)));
 }
 
 #define BORDER(which) \
@@ -1795,6 +1794,11 @@ void AbstractClient::evaluateWindowRules()
 void AbstractClient::setOnActivities(QStringList newActivitiesList)
 {
     Q_UNUSED(newActivitiesList)
+}
+
+void AbstractClient::checkNoBorder()
+{
+    setNoBorder(false);
 }
 
 }

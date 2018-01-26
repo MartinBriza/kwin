@@ -55,6 +55,10 @@ class OutputManagementInterface;
 namespace KWin
 {
 
+namespace ColorCorrect {
+struct GammaRamp;
+}
+
 class Udev;
 class UdevMonitor;
 
@@ -92,6 +96,9 @@ public:
     QVector<DrmOutput*> outputs() const {
         return m_outputs;
     }
+    QVector<DrmOutput*> enabledOutputs() const {
+        return m_enabledOutputs;
+    }
     QVector<DrmPlane*> planes() const {
         return m_planes;
     }
@@ -117,14 +124,24 @@ public:
     gbm_device *gbmDevice() const {
         return m_gbmDevice;
     }
+    int gammaRampSize(int screen) const override;
+    bool setGammaRamp(int screen, ColorCorrect::GammaRamp &gamma) override;
 
     QVector<CompositingType> supportedCompositors() const override;
+
+    QString supportInformation() const override;
 
 public Q_SLOTS:
     void turnOutputsOn();
 
 Q_SIGNALS:
+    /**
+     * Emitted whenever an output is removed/disabled
+     */
     void outputRemoved(KWin::DrmOutput *output);
+    /**
+     * Emitted whenever an output is added/enabled
+     */
     void outputAdded(KWin::DrmOutput *output);
 
 protected:
@@ -156,13 +173,15 @@ private:
     QVector<DrmCrtc*> m_crtcs;
     // all connectors
     QVector<DrmConnector*> m_connectors;
-    // currently active output pipelines (planes + crtc + encoder + connector)
+    // active output pipelines (planes + crtc + encoder + connector)
     QVector<DrmOutput*> m_outputs;
-    DrmDumbBuffer *m_cursor[2];
+    // active and enabled pipelines (above + wl_output)
+    QVector<DrmOutput*> m_enabledOutputs;
+
     bool m_deleteBufferAfterPageFlip;
     bool m_atomicModeSetting = false;
     bool m_cursorEnabled = false;
-    int m_cursorIndex = 0;
+    QSize m_cursorSize;
     int m_pageFlipsPending = 0;
     bool m_active = false;
     // all available planes: primarys, cursors and overlays

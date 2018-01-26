@@ -37,9 +37,9 @@ class DrmObject
 {
 public:
     // creates drm object by its id delivered by the kernel
-    DrmObject(uint32_t object_id, DrmBackend *backend);
+    DrmObject(uint32_t object_id, int fd);
 
-    virtual ~DrmObject() = 0;
+    virtual ~DrmObject();
 
     virtual bool atomicInit() = 0;
 
@@ -53,34 +53,39 @@ public:
     void setOutput(DrmOutput* output) {
         m_output = output;
     }
-    
-    uint32_t propId(int prop) {
-        return m_props[prop]->propId();
-    }
-    uint64_t value(int prop) {
-        return m_props[prop]->value();
+
+    bool propHasEnum(int prop, uint64_t value) const {
+        auto property = m_props.at(prop);
+        return property ? property->hasEnum(value) : false;
     }
 
     void setValue(int prop, uint64_t new_value)
     {
         Q_ASSERT(prop < m_props.size());
-        m_props[prop]->setValue(new_value);
+        auto property = m_props.at(prop);
+        if (property) {
+            property->setValue(new_value);
+        }
+    }
+
+    int fd() const {
+        return m_fd;
     }
 
     virtual bool atomicPopulate(drmModeAtomicReq *req);
 
 protected:
     virtual bool initProps() = 0;           // only derived classes know names and quantity of properties
+    void setPropertyNames(QVector<QByteArray> &&vector);
     void initProp(int n, drmModeObjectProperties *properties, QVector<QByteArray> enumNames = QVector<QByteArray>(0));
-    bool atomicAddProperty(drmModeAtomicReq *req, int prop, uint64_t value);
+    class Property;
+    bool atomicAddProperty(drmModeAtomicReq *req, Property *property);
 
-    DrmBackend *m_backend;
-    const uint32_t m_id = 0;
+    int m_fd;
+    const uint32_t m_id;
     DrmOutput *m_output = nullptr;
 
     // for comparision with received name of DRM object
-    QVector<QByteArray> m_propsNames;
-    class Property;
     QVector<Property *> m_props;
 
     class Property
@@ -94,15 +99,21 @@ protected:
         uint64_t enumMap(int n) {
             return m_enumMap[n];    // TODO: test on index out of bounds?
         }
+        bool hasEnum(uint64_t value) const {
+            return m_enumMap.contains(value);
+        }
 
-        uint32_t propId() {
+        uint32_t propId() const {
             return m_propId;
         }
-        uint64_t value() {
+        uint64_t value() const {
             return m_value;
         }
         void setValue(uint64_t new_value) {
             m_value = new_value;
+        }
+        const QByteArray &name() const {
+            return m_propName;
         }
 
     private:
@@ -113,6 +124,9 @@ protected:
         QVector<uint64_t> m_enumMap;
         QVector<QByteArray> m_enumNames;
     };
+
+private:
+    QVector<QByteArray> m_propsNames;
 };
 
 

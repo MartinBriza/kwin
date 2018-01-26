@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <kwinglobals.h>
 
 #include <QObject>
+#include <QPointer>
 #include <QSize>
 #include <QMutex>
 #include <QVector>
@@ -60,6 +61,8 @@ public:
      **/
     void setScreenSize(const QSize &size);
 
+    void updateScreens();
+
     bool hasKeyboard() const {
         return m_keyboard > 0;
     }
@@ -71,6 +74,9 @@ public:
     }
     bool hasPointer() const {
         return m_pointer > 0;
+    }
+    bool hasTabletModeSwitch() const {
+        return m_tabletModeSwitch > 0;
     }
 
     bool isSuspended() const;
@@ -91,6 +97,8 @@ public:
 
     void updateLEDs(KWin::Xkb::LEDs leds);
 
+    static void createThread();
+
 Q_SIGNALS:
     void keyChanged(quint32 key, KWin::InputRedirection::KeyboardKeyState, quint32 time, KWin::LibInput::Device *device);
     void pointerButtonChanged(quint32 button, KWin::InputRedirection::PointerButtonState state, quint32 time, KWin::LibInput::Device *device);
@@ -106,6 +114,7 @@ Q_SIGNALS:
     void hasAlphaNumericKeyboardChanged(bool);
     void hasPointerChanged(bool);
     void hasTouchChanged(bool);
+    void hasTabletModeSwitchChanged(bool);
     void deviceAdded(KWin::LibInput::Device *);
     void deviceRemoved(KWin::LibInput::Device *);
     void deviceAddedSysName(QString);
@@ -118,6 +127,8 @@ Q_SIGNALS:
     void pinchGestureUpdate(qreal scale, qreal angleDelta, const QSizeF &delta, quint32 time, KWin::LibInput::Device *device);
     void pinchGestureEnd(quint32 time, KWin::LibInput::Device *device);
     void pinchGestureCancelled(quint32 time, KWin::LibInput::Device *device);
+    void switchToggledOn(quint32 time, quint64 timeMicroseconds, KWin::LibInput::Device *device);
+    void switchToggledOff(quint32 time, quint64 timeMicroseconds, KWin::LibInput::Device *device);
 
     void eventsRead();
 
@@ -129,6 +140,7 @@ private:
     Connection(Context *input, QObject *parent = nullptr);
     void handleEvent();
     void applyDeviceConfig(Device *device);
+    void applyScreenToDevice(Device *device);
     Context *m_input;
     QSocketNotifier *m_notifier;
     QSize m_size;
@@ -136,10 +148,12 @@ private:
     int m_alphaNumericKeyboard = 0;
     int m_pointer = 0;
     int m_touch = 0;
+    int m_tabletModeSwitch = 0;
     bool m_keyboardBeforeSuspend = false;
     bool m_alphaNumericKeyboardBeforeSuspend = false;
     bool m_pointerBeforeSuspend = false;
     bool m_touchBeforeSuspend = false;
+    bool m_tabletModeSwitchBeforeSuspend = false;
     QMutex m_mutex;
     QVector<Event*> m_eventQueue;
     bool wasSuspended = false;
@@ -149,7 +163,7 @@ private:
     Xkb::LEDs m_leds;
 
     KWIN_SINGLETON(Connection)
-    static QThread *s_thread;
+    static QPointer<QThread> s_thread;
 };
 
 }

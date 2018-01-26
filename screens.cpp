@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <abstract_client.h>
 #include <client.h>
 #include "cursor.h"
+#include "orientation_sensor.h"
 #include "utils.h"
 #include "settings.h"
 #include <workspace.h>
@@ -54,7 +55,20 @@ Screens::Screens(QObject *parent)
     , m_current(0)
     , m_currentFollowsMouse(false)
     , m_changedTimer(new QTimer(this))
+    , m_orientationSensor(new OrientationSensor(this))
 {
+    connect(this, &Screens::changed, this,
+        [this] {
+            int internalIndex = -1;
+            for (int i = 0; i < m_count; i++) {
+                if (isInternal(i)) {
+                    internalIndex = i;
+                    break;
+                }
+            }
+            m_orientationSensor->setEnabled(internalIndex != -1 && supportsTransformations(internalIndex));
+        }
+    );
 }
 
 Screens::~Screens()
@@ -94,7 +108,6 @@ float Screens::refreshRate(int screen) const
 qreal Screens::scale(int screen) const
 {
     Q_UNUSED(screen)
-    qCWarning(KWIN_CORE, "%s::scale(qreal screen) is a stub, please reimplement it!", metaObject()->className());
     return 1;
 }
 
@@ -193,6 +206,32 @@ QSize Screens::displaySize() const
 QSizeF Screens::physicalSize(int screen) const
 {
     return QSizeF(size(screen)) / 3.8;
+}
+
+bool Screens::isInternal(int screen) const
+{
+    Q_UNUSED(screen)
+    return false;
+}
+
+bool Screens::supportsTransformations(int screen) const
+{
+    Q_UNUSED(screen)
+    return false;
+}
+
+Qt::ScreenOrientation Screens::orientation(int screen) const
+{
+    Q_UNUSED(screen)
+    return Qt::PrimaryOrientation;
+}
+
+void Screens::setConfig(KSharedConfig::Ptr config)
+{
+    m_config = config;
+    if (m_orientationSensor) {
+        m_orientationSensor->setConfig(config);
+    }
 }
 
 BasicScreens::BasicScreens(Platform *backend, QObject *parent)

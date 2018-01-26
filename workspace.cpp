@@ -46,6 +46,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "rules.h"
 #include "screenedge.h"
 #include "screens.h"
+#include "platform.h"
 #include "scripting/scripting.h"
 #ifdef KWIN_BUILD_TABBOX
 #include "tabbox.h"
@@ -864,8 +865,8 @@ void Workspace::slotReconfigure()
             !options->borderlessMaximizedWindows()) {
         // in case borderless maximized windows option changed and new option
         // is to have borders, we need to unset the borders for all maximized windows
-        for (ClientList::Iterator it = clients.begin();
-                it != clients.end();
+        for (auto it = m_allClients.begin();
+                it != m_allClients.end();
                 ++it) {
             if ((*it)->maximizeMode() == MaximizeFull)
                 (*it)->checkNoBorder();
@@ -1403,19 +1404,21 @@ QString Workspace::supportInformation() const
 #endif
     support.append(QStringLiteral("\n"));
 
-    support.append(QStringLiteral("X11\n"));
-    support.append(QStringLiteral("===\n"));
-    auto x11setup = xcb_get_setup(connection());
-    support.append(QStringLiteral("Vendor: %1\n").arg(QString::fromUtf8(QByteArray::fromRawData(xcb_setup_vendor(x11setup), xcb_setup_vendor_length(x11setup)))));
-    support.append(QStringLiteral("Vendor Release: %1\n").arg(x11setup->release_number));
-    support.append(QStringLiteral("Protocol Version/Revision: %1/%2\n").arg(x11setup->protocol_major_version).arg(x11setup->protocol_minor_version));
-    const auto extensions = Xcb::Extensions::self()->extensions();
-    for (const auto &e : extensions) {
-        support.append(QStringLiteral("%1: %2; Version: 0x%3\n").arg(QString::fromUtf8(e.name))
-                                                                .arg(e.present ? yes.trimmed() : no.trimmed())
-                                                                .arg(QString::number(e.version, 16)));
+    if (auto c = kwinApp()->x11Connection()) {
+        support.append(QStringLiteral("X11\n"));
+        support.append(QStringLiteral("===\n"));
+        auto x11setup = xcb_get_setup(c);
+        support.append(QStringLiteral("Vendor: %1\n").arg(QString::fromUtf8(QByteArray::fromRawData(xcb_setup_vendor(x11setup), xcb_setup_vendor_length(x11setup)))));
+        support.append(QStringLiteral("Vendor Release: %1\n").arg(x11setup->release_number));
+        support.append(QStringLiteral("Protocol Version/Revision: %1/%2\n").arg(x11setup->protocol_major_version).arg(x11setup->protocol_minor_version));
+        const auto extensions = Xcb::Extensions::self()->extensions();
+        for (const auto &e : extensions) {
+            support.append(QStringLiteral("%1: %2; Version: 0x%3\n").arg(QString::fromUtf8(e.name))
+                                                                    .arg(e.present ? yes.trimmed() : no.trimmed())
+                                                                    .arg(QString::number(e.version, 16)));
+        }
+        support.append(QStringLiteral("\n"));
     }
-    support.append(QStringLiteral("\n"));
 
     if (auto bridge = Decoration::DecorationBridge::self()) {
         support.append(QStringLiteral("Decoration\n"));
@@ -1423,6 +1426,11 @@ QString Workspace::supportInformation() const
         support.append(bridge->supportInformation());
         support.append(QStringLiteral("\n"));
     }
+    support.append(QStringLiteral("Platform\n"));
+    support.append(QStringLiteral("==========\n"));
+    support.append(kwinApp()->platform()->supportInformation());
+    support.append(QStringLiteral("\n"));
+
     support.append(QStringLiteral("Options\n"));
     support.append(QStringLiteral("=======\n"));
     const QMetaObject *metaOptions = options->metaObject();
@@ -1472,13 +1480,14 @@ QString Workspace::supportInformation() const
     for (int i=0; i<screens()->count(); ++i) {
         const QRect geo = screens()->geometry(i);
         support.append(QStringLiteral("Screen %1:\n").arg(i));
-        support.append(QStringLiteral("---------\n").arg(i));
+        support.append(QStringLiteral("---------\n"));
         support.append(QStringLiteral("Name: %1\n").arg(screens()->name(i)));
         support.append(QStringLiteral("Geometry: %1,%2,%3x%4\n")
                               .arg(geo.x())
                               .arg(geo.y())
                               .arg(geo.width())
                               .arg(geo.height()));
+        support.append(QStringLiteral("Scale: %1\n").arg(screens()->scale(i)));
         support.append(QStringLiteral("Refresh Rate: %1\n\n").arg(screens()->refreshRate(i)));
     }
     support.append(QStringLiteral("\nCompositing\n"));

@@ -41,6 +41,8 @@ int libinput_device_has_capability(struct libinput_device *device, enum libinput
         return device->gestureSupported;
     case LIBINPUT_DEVICE_CAP_TABLET_TOOL:
         return device->tabletTool;
+    case LIBINPUT_DEVICE_CAP_SWITCH:
+        return device->switchDevice;
     default:
         return 0;
     }
@@ -192,6 +194,22 @@ int libinput_device_config_accel_is_available(struct libinput_device *device)
 int libinput_device_config_calibration_has_matrix(struct libinput_device *device)
 {
     return device->supportsCalibrationMatrix;
+}
+
+enum libinput_config_status libinput_device_config_calibration_set_matrix(struct libinput_device *device, const float matrix[6])
+{
+    for (std::size_t i = 0; i < 6; i++) {
+        device->calibrationMatrix[i] = matrix[i];
+    }
+    return LIBINPUT_CONFIG_STATUS_SUCCESS;
+}
+
+int libinput_device_config_calibration_get_default_matrix(struct libinput_device *device, float matrix[6])
+{
+    for (std::size_t i = 0; i < 6; i++) {
+        matrix[i] = device->defaultCalibrationMatrix[i];
+    }
+    return device->defaultCalibrationMatrixIsIdentity ? 0 : 1;
 }
 
 int libinput_device_config_left_handed_is_available(struct libinput_device *device)
@@ -793,4 +811,48 @@ uint32_t libinput_device_config_scroll_get_button(struct libinput_device *device
 uint32_t libinput_device_config_scroll_get_default_button(struct libinput_device *device)
 {
     return device->defaultScrollButton;
+}
+
+int libinput_device_switch_has_switch(struct libinput_device *device, enum libinput_switch sw)
+{
+    switch (sw) {
+    case LIBINPUT_SWITCH_LID:
+        return device->lidSwitch;
+    case LIBINPUT_SWITCH_TABLET_MODE:
+        return device->tabletModeSwitch;
+    default:
+        Q_UNREACHABLE();
+    }
+    return 0;
+}
+
+struct libinput_event_switch *libinput_event_get_switch_event(struct libinput_event *event)
+{
+    if (event->type == LIBINPUT_EVENT_SWITCH_TOGGLE) {
+        return reinterpret_cast<libinput_event_switch*>(event);
+    } else {
+        return nullptr;
+    }
+}
+
+enum libinput_switch_state libinput_event_switch_get_switch_state(struct libinput_event_switch *event)
+{
+    switch (event->state) {
+    case libinput_event_switch::State::On:
+        return LIBINPUT_SWITCH_STATE_ON;
+    case libinput_event_switch::State::Off:
+        return LIBINPUT_SWITCH_STATE_OFF;
+    default:
+        Q_UNREACHABLE();
+    }
+}
+
+uint32_t libinput_event_switch_get_time(struct libinput_event_switch *event)
+{
+    return event->time;;
+}
+
+uint64_t libinput_event_switch_get_time_usec(struct libinput_event_switch *event)
+{
+    return event->timeMicroseconds;
 }

@@ -172,6 +172,25 @@ public:
     virtual ~SwipeGestureEvent();
 };
 
+class SwitchEvent : public Event
+{
+public:
+    SwitchEvent(libinput_event *event, libinput_event_type type);
+    ~SwitchEvent() override;
+
+    enum class State {
+        Off,
+        On
+    };
+    State state() const;
+
+    quint32 time() const;
+    quint64 timeMicroseconds() const;
+
+private:
+    libinput_event_switch *m_switchEvent;
+};
+
 inline
 libinput_event_type Event::type() const
 {

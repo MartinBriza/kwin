@@ -47,6 +47,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <KConfigGroup>
 #include <KLocalizedString>
+#include <KCrash>
 
 #include <QThread>
 #include <QOpenGLContext>
@@ -87,7 +88,9 @@ X11StandalonePlatform::~X11StandalonePlatform()
         m_openGLFreezeProtectionThread->wait();
         delete m_openGLFreezeProtectionThread;
     }
-    XRenderUtils::cleanup();
+    if (isReady()) {
+        XRenderUtils::cleanup();
+    }
 }
 
 void X11StandalonePlatform::init()
@@ -116,9 +119,7 @@ OpenGLBackend *X11StandalonePlatform::createOpenGLBackend()
         } else {
             qCWarning(KWIN_X11STANDALONE) << "Glx not available, trying EGL instead.";
             // no break, needs fall-through
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 8, 0))
             Q_FALLTHROUGH();
-#endif
         }
 #endif
     case EglPlatformInterface:
@@ -236,9 +237,7 @@ void X11StandalonePlatform::createOpenGLSafePoint(OpenGLSafePoint safePoint)
         group.writeEntry(unsafeKey, true);
         group.sync();
         // Deliberately continue with PreFrame
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 8, 0))
         Q_FALLTHROUGH();
-#endif
     case OpenGLSafePoint::PreFrame:
         if (m_openGLFreezeProtectionThread == nullptr) {
             Q_ASSERT(m_openGLFreezeProtection == nullptr);
@@ -249,13 +248,15 @@ void X11StandalonePlatform::createOpenGLSafePoint(OpenGLSafePoint safePoint)
             m_openGLFreezeProtection->setInterval(15000);
             m_openGLFreezeProtection->setSingleShot(true);
             m_openGLFreezeProtection->start();
+            const QString configName = kwinApp()->config()->name();
             m_openGLFreezeProtection->moveToThread(m_openGLFreezeProtectionThread);
             connect(m_openGLFreezeProtection, &QTimer::timeout, m_openGLFreezeProtection,
-                [] {
+                [configName] {
                     const QString unsafeKey(QLatin1String("OpenGLIsUnsafe") + (kwinApp()->isX11MultiHead() ? QString::number(kwinApp()->x11ScreenNumber()) : QString()));
-                    auto group = KConfigGroup(kwinApp()->config(), "Compositing");
+                    auto group = KConfigGroup(KSharedConfig::openConfig(configName), "Compositing");
                     group.writeEntry(unsafeKey, true);
                     group.sync();
+                    KCrash::setDrKonqiEnabled(false);
                     qFatal("Freeze in OpenGL initialization detected");
                 }, Qt::DirectConnection);
         } else {
@@ -267,9 +268,7 @@ void X11StandalonePlatform::createOpenGLSafePoint(OpenGLSafePoint safePoint)
         group.writeEntry(unsafeKey, false);
         group.sync();
         // Deliberately continue with PostFrame
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 8, 0))
         Q_FALLTHROUGH();
-#endif
     case OpenGLSafePoint::PostFrame:
         QMetaObject::invokeMethod(m_openGLFreezeProtection, "stop", Qt::QueuedConnection);
         break;

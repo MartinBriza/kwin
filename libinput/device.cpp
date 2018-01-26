@@ -132,6 +132,23 @@ static const QMap<ConfigKey, ConfigData> s_configData {
     {ConfigKey::ScrollButton, ConfigData(QByteArrayLiteral("ScrollButton"), &Device::setScrollButton, &Device::defaultScrollButton)}
 };
 
+namespace {
+QMatrix4x4 defaultCalibrationMatrix(libinput_device *device)
+{
+    float matrix[6];
+    const int ret = libinput_device_config_calibration_get_default_matrix(device, matrix);
+    if (ret == 0) {
+        return QMatrix4x4();
+    }
+    return QMatrix4x4{
+        matrix[0], matrix[1], matrix[2], 0.0f,
+        matrix[3], matrix[4], matrix[5], 0.0f,
+        0.0f,  0.0f, 1.0f, 0.0f,
+        0.0f,  0.0f, 0.0f, 1.0f
+    };
+}
+}
+
 Device::Device(libinput_device *device, QObject *parent)
     : QObject(parent)
     , m_device(device)
@@ -146,6 +163,9 @@ Device::Device(libinput_device *device, QObject *parent)
     , m_tabletPad(false)
 #endif
     , m_supportsGesture(libinput_device_has_capability(m_device, LIBINPUT_DEVICE_CAP_GESTURE))
+    , m_switch(libinput_device_has_capability(m_device, LIBINPUT_DEVICE_CAP_SWITCH))
+    , m_lidSwitch(m_switch ? libinput_device_switch_has_switch(m_device, LIBINPUT_SWITCH_LID) : false)
+    , m_tabletSwitch(m_switch ? libinput_device_switch_has_switch(m_device, LIBINPUT_SWITCH_TABLET_MODE) : false)
     , m_name(QString::fromLocal8Bit(libinput_device_get_name(m_device)))
     , m_sysName(QString::fromLocal8Bit(libinput_device_get_sysname(m_device)))
     , m_outputName(QString::fromLocal8Bit(libinput_device_get_output_name(m_device)))
@@ -188,6 +208,7 @@ Device::Device(libinput_device *device, QObject *parent)
     , m_pointerAccelerationProfile(libinput_device_config_accel_get_profile(m_device))
     , m_enabled(m_supportsDisableEvents ? libinput_device_config_send_events_get_mode(m_device) == LIBINPUT_CONFIG_SEND_EVENTS_ENABLED : true)
     , m_config()
+    , m_defaultCalibrationMatrix(m_supportsCalibrationMatrix ? defaultCalibrationMatrix(m_device) : QMatrix4x4{})
 {
     libinput_device_ref(m_device);
 
@@ -423,6 +444,57 @@ CONFIG(setTapDragLock, false, tap_set_drag_lock_enabled, DRAG_LOCK, tapDragLock,
 CONFIG(setMiddleEmulation, m_supportsMiddleEmulation == false, middle_emulation_set_enabled, MIDDLE_EMULATION, middleEmulation, MiddleButtonEmulation)
 
 #undef CONFIG
+
+void Device::setOrientation(Qt::ScreenOrientation orientation)
+{
+    if (!m_supportsCalibrationMatrix) {
+        return;
+    }
+    // 90 deg cw:
+    static const QMatrix4x4 portraitMatrix{
+        0.0f, -1.0f, 1.0f, 0.0f,
+        1.0f,  0.0f, 0.0f, 0.0f,
+        0.0f,  0.0f, 1.0f, 0.0f,
+        0.0f,  0.0f, 0.0f, 1.0f
+    };
+    // 180 deg cw:
+    static const QMatrix4x4 invertedLandscapeMatrix{
+        -1.0f,  0.0f, 1.0f, 0.0f,
+         0.0f, -1.0f, 1.0f, 0.0f,
+         0.0f,  0.0f, 1.0f, 0.0f,
+         0.0f,  0.0f, 0.0f, 1.0f
+    };
+    // 270 deg cw
+    static const QMatrix4x4 invertedPortraitMatrix{
+         0.0f, 1.0f, 0.0f, 0.0f,
+        -1.0f, 0.0f, 1.0f, 0.0f,
+         0.0f,  0.0f, 1.0f, 0.0f,
+         0.0f,  0.0f, 0.0f, 1.0f
+    };
+    QMatrix4x4 matrix;
+    switch (orientation) {
+    case Qt::PortraitOrientation:
+        matrix = portraitMatrix;
+        break;
+    case Qt::InvertedLandscapeOrientation:
+        matrix = invertedLandscapeMatrix;
+        break;
+    case Qt::InvertedPortraitOrientation:
+        matrix = invertedPortraitMatrix;
+        break;
+    case Qt::PrimaryOrientation:
+    case Qt::LandscapeOrientation:
+    default:
+        break;
+    }
+    const auto combined = m_defaultCalibrationMatrix * matrix;
+    const auto columnOrder = combined.constData();
+    float m[6] = {
+        columnOrder[0], columnOrder[4], columnOrder[8],
+        columnOrder[1], columnOrder[5], columnOrder[9]
+    };
+    libinput_device_config_calibration_set_matrix(m_device, m);
+}
 
 }
 }

@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <KWayland/Client/compositor.h>
 #include <KWayland/Client/connection_thread.h>
 #include <KWayland/Client/event_queue.h>
+#include <KWayland/Client/idleinhibit.h>
 #include <KWayland/Client/registry.h>
 #include <KWayland/Client/plasmashell.h>
 #include <KWayland/Client/plasmawindowmanagement.h>
@@ -35,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <KWayland/Client/shm_pool.h>
 #include <KWayland/Client/output.h>
 #include <KWayland/Client/surface.h>
+#include <KWayland/Client/appmenu.h>
 #include <KWayland/Client/xdgshell.h>
 #include <KWayland/Server/display.h>
 
@@ -71,6 +73,8 @@ static struct {
     Registry *registry = nullptr;
     QThread *thread = nullptr;
     QVector<Output*> outputs;
+    IdleInhibitManager *idleInhibit = nullptr;
+    AppMenuManager *appMenu = nullptr;
 } s_waylandConnection;
 
 bool setupWaylandConnection(AdditionalWaylandInterfaces flags)
@@ -187,6 +191,19 @@ bool setupWaylandConnection(AdditionalWaylandInterfaces flags)
             return false;
         }
     }
+    if (flags.testFlag(AdditionalWaylandInterface::IdleInhibition)) {
+        s_waylandConnection.idleInhibit = registry->createIdleInhibitManager(registry->interface(Registry::Interface::IdleInhibitManagerUnstableV1).name,
+                                                                            registry->interface(Registry::Interface::IdleInhibitManagerUnstableV1).version);
+        if (!s_waylandConnection.idleInhibit->isValid()) {
+            return false;
+        }
+    }
+    if (flags.testFlag(AdditionalWaylandInterface::AppMenu)) {
+        s_waylandConnection.appMenu = registry->createAppMenuManager(registry->interface(Registry::Interface::AppMenu).name, registry->interface(Registry::Interface::AppMenu).version);
+        if (!s_waylandConnection.appMenu->isValid()) {
+            return false;
+        }
+    }
 
     return true;
 }
@@ -213,12 +230,16 @@ void destroyWaylandConnection()
     s_waylandConnection.xdgShellV6 = nullptr;
     delete s_waylandConnection.shell;
     s_waylandConnection.shell = nullptr;
+    delete s_waylandConnection.idleInhibit;
+    s_waylandConnection.idleInhibit = nullptr;
     delete s_waylandConnection.shm;
     s_waylandConnection.shm = nullptr;
     delete s_waylandConnection.queue;
     s_waylandConnection.queue = nullptr;
     delete s_waylandConnection.registry;
     s_waylandConnection.registry = nullptr;
+    delete s_waylandConnection.appMenu;
+    s_waylandConnection.appMenu = nullptr;
     if (s_waylandConnection.thread) {
         QSignalSpy spy(s_waylandConnection.connection, &QObject::destroyed);
         s_waylandConnection.connection->deleteLater();
@@ -276,6 +297,16 @@ PlasmaWindowManagement *waylandWindowManagement()
 PointerConstraints *waylandPointerConstraints()
 {
     return s_waylandConnection.pointerConstraints;
+}
+
+IdleInhibitManager *waylandIdleInhibitManager()
+{
+    return s_waylandConnection.idleInhibit;
+}
+
+AppMenuManager* waylandAppMenuManager()
+{
+    return s_waylandConnection.appMenu;
 }
 
 bool waitForWaylandPointer()

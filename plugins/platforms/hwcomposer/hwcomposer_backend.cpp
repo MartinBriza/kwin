@@ -394,22 +394,32 @@ void HwcomposerBackend::wakeVSync()
     m_vsyncMutex.unlock();
 }
 
-static void initLayer(hwc_layer_1_t *layer, const hwc_rect_t &rect)
+static void initLayer(hwc_layer_1_t *layer, const hwc_rect_t &rect, int layerCompositionType)
 {
     memset(layer, 0, sizeof(hwc_layer_1_t));
-    layer->compositionType = HWC_FRAMEBUFFER;
+    layer->compositionType = layerCompositionType;
     layer->hints = 0;
     layer->flags = 0;
     layer->handle = 0;
     layer->transform = 0;
     layer->blending = HWC_BLENDING_NONE;
+#ifdef HWC_DEVICE_API_VERSION_1_3
+    layer->sourceCropf.top = 0.0f;
+    layer->sourceCropf.left = 0.0f;
+    layer->sourceCropf.bottom = (float) rect.bottom;
+    layer->sourceCropf.right = (float) rect.right;
+#else
     layer->sourceCrop = rect;
+#endif
     layer->displayFrame = rect;
     layer->visibleRegionScreen.numRects = 1;
     layer->visibleRegionScreen.rects = &layer->displayFrame;
     layer->acquireFenceFd = -1;
     layer->releaseFenceFd = -1;
     layer->planeAlpha = 0xFF;
+#ifdef HWC_DEVICE_API_VERSION_1_5
+    layer->surfaceDamage.numRects = 0;
+#endif
 }
 
 HwcomposerWindow::HwcomposerWindow(HwcomposerBackend *backend)
@@ -434,8 +444,8 @@ HwcomposerWindow::HwcomposerWindow(HwcomposerBackend *backend)
         m_backend->size().width(),
         m_backend->size().height()
     };
-    initLayer(&list->hwLayers[0], rect);
-    initLayer(&list->hwLayers[1], rect);
+    initLayer(&list->hwLayers[0], rect, HWC_FRAMEBUFFER);
+    initLayer(&list->hwLayers[1], rect, HWC_FRAMEBUFFER_TARGET);
 
     list->retireFenceFd = -1;
     list->flags = HWC_GEOMETRY_CHANGED;

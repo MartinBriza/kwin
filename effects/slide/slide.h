@@ -47,11 +47,14 @@ public:
         return 50;
     }
 
+    static bool supported();
+
 private Q_SLOTS:
-    void slotDesktopChanged(int old, int current);
+    void slotDesktopChanged(int old, int current, KWin::EffectWindow* with);
 
 private:
     void windowAdded(EffectWindow* w);
+    void windowDeleted(EffectWindow* w);
     bool shouldForceBackgroundContrast(const EffectWindow* w) const;
     QList< EffectWindow* > m_backgroundContrastForcedBefore;
     QRect desktopRect(int desktop) const;
@@ -62,6 +65,7 @@ private:
     bool slide_painting_sticky;
     bool slide_painting_keep_above;
     QPoint slide_painting_diff;
+    EffectWindow* m_movingWindow = nullptr;
 
 };
 

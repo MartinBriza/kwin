@@ -29,8 +29,10 @@ namespace KWayland
 {
 namespace Client
 {
+class AppMenuManager;
 class ConnectionThread;
 class Compositor;
+class IdleInhibitManager;
 class PlasmaShell;
 class PlasmaWindowManagement;
 class PointerConstraints;
@@ -81,7 +83,9 @@ enum class AdditionalWaylandInterface {
     Decoration = 1 << 1,
     PlasmaShell = 1 << 2,
     WindowManagement = 1 << 3,
-    PointerConstraints = 1 << 4
+    PointerConstraints = 1 << 4,
+    IdleInhibition = 1 << 5,
+    AppMenu = 1 << 6
 };
 Q_DECLARE_FLAGS(AdditionalWaylandInterfaces, AdditionalWaylandInterface)
 /**
@@ -109,6 +113,9 @@ KWayland::Client::ServerSideDecorationManager *waylandServerSideDecoration();
 KWayland::Client::PlasmaShell *waylandPlasmaShell();
 KWayland::Client::PlasmaWindowManagement *waylandWindowManagement();
 KWayland::Client::PointerConstraints *waylandPointerConstraints();
+KWayland::Client::IdleInhibitManager *waylandIdleInhibitManager();
+KWayland::Client::AppMenuManager *waylandAppMenuManager();
+
 
 bool waitForWaylandPointer();
 bool waitForWaylandTouch();
@@ -125,6 +132,7 @@ enum class ShellSurfaceType {
 QObject *createShellSurface(ShellSurfaceType type, KWayland::Client::Surface *surface, QObject *parent = nullptr);
 KWayland::Client::ShellSurface *createShellSurface(KWayland::Client::Surface *surface, QObject *parent = nullptr);
 KWayland::Client::XdgShellSurface *createXdgShellV5Surface(KWayland::Client::Surface *surface, QObject *parent = nullptr);
+KWayland::Client::XdgShellSurface *createXdgShellV6Surface(KWayland::Client::Surface *surface, QObject *parent = nullptr);
 
 
 /**
@@ -176,11 +184,14 @@ Q_DECLARE_METATYPE(KWin::Test::ShellSurfaceType)
 int main(int argc, char *argv[]) \
 { \
     setenv("QT_QPA_PLATFORM", "wayland-org.kde.kwin.qpa", true); \
-    setenv("QT_QPA_PLATFORM_PLUGIN_PATH", KWINQPAPATH, true); \
+    setenv("QT_QPA_PLATFORM_PLUGIN_PATH", QFileInfo(QString::fromLocal8Bit(argv[0])).absolutePath().toLocal8Bit().constData(), true); \
     setenv("KWIN_FORCE_OWN_QPA", "1", true); \
     DPI; \
     KWin::WaylandTestApplication app(OperationMode, argc, argv); \
     app.setAttribute(Qt::AA_Use96Dpi, true); \
+    const auto ownPath = app.libraryPaths().last(); \
+    app.removeLibraryPath(ownPath); \
+    app.addLibraryPath(ownPath); \
     TestObject tc; \
     return QTest::qExec(&tc, argc, argv); \
 }

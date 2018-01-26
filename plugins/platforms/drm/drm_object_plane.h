@@ -32,7 +32,7 @@ class DrmBuffer;
 class DrmPlane : public DrmObject
 {
 public:
-    DrmPlane(uint32_t plane_id, DrmBackend *backend);
+    DrmPlane(uint32_t plane_id, int fd);
 
     ~DrmPlane();
 
@@ -48,6 +48,7 @@ public:
         CrtcH,
         FbId,
         CrtcId,
+        Rotation,
         Count
     };
 
@@ -57,7 +58,17 @@ public:
         Overlay,
         Count
     };
-    
+
+    enum class Transformation {
+        Rotate0 = 1 << 0,
+        Rotate90 = 1 << 1,
+        Rotate180 = 1 << 2,
+        Rotate270 = 1 << 3,
+        ReflectX = 1 << 4,
+        ReflectY = 1 << 5
+    };
+    Q_DECLARE_FLAGS(Transformations, Transformation);
+
     bool atomicInit();
     bool initProps();
     TypeIndex type();
@@ -79,10 +90,16 @@ public:
         m_current = b;
     }
     void setNext(DrmBuffer *b);
+    void setTransformation(Transformations t);
+    Transformations transformation();
 
     bool atomicPopulate(drmModeAtomicReq *req);
     void flipBuffer();
     void flipBufferWithDelete();
+
+    Transformations supportedTransformations() const {
+        return m_supportedTransformations;
+    }
 
 private:
     DrmBuffer *m_current = nullptr;
@@ -93,9 +110,13 @@ private:
 
     // TODO: when using overlay planes in the future: restrict possible screens / crtcs of planes
     uint32_t m_possibleCrtcs;
+
+    Transformations m_supportedTransformations = Transformation::Rotate0;
 };
 
 }
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(KWin::DrmPlane::Transformations)
 
 #endif
 

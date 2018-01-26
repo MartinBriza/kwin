@@ -29,6 +29,8 @@ namespace Server
 {
 class ShellSurfaceInterface;
 class ServerSideDecorationInterface;
+class ServerSideDecorationPaletteInterface;
+class AppMenuInterface;
 class PlasmaShellSurfaceInterface;
 class QtExtendedSurfaceInterface;
 }
@@ -80,7 +82,6 @@ public:
     void closeWindow() override;
     AbstractClient *findModal(bool allow_itself = false) override;
     bool isCloseable() const override;
-    bool isFullScreenable() const override;
     bool isFullScreen() const override;
     bool isMaximizable() const override;
     bool isMinimizable() const override;
@@ -136,6 +137,8 @@ public:
     void installPlasmaShellSurface(KWayland::Server::PlasmaShellSurfaceInterface *surface);
     void installQtExtendedSurface(KWayland::Server::QtExtendedSurfaceInterface *surface);
     void installServerSideDecoration(KWayland::Server::ServerSideDecorationInterface *decoration);
+    void installAppMenu(KWayland::Server::AppMenuInterface *appmenu);
+    void installPalette(KWayland::Server::ServerSideDecorationPaletteInterface *palette);
 
     bool isInitialPositionSet() const override;
 
@@ -155,8 +158,6 @@ public:
     // TODO: const-ref
     void placeIn(QRect &area);
 
-    void updateApplicationMenu();
-
     bool hasPopupGrab() const override;
     void popupDone() override;
 
@@ -164,7 +165,7 @@ public:
 
 protected:
     void addDamage(const QRegion &damage) override;
-    bool belongsToSameApplication(const AbstractClient *other, bool active_hack) const override;
+    bool belongsToSameApplication(const AbstractClient *other, SameApplicationChecks checks) const override;
     void doSetActive() override;
     Layer layerForDock() const override;
     void changeMaximize(bool horizontal, bool vertical, bool adjust) override;
@@ -220,6 +221,8 @@ private:
     NET::WindowType m_windowType = NET::Normal;
     QPointer<KWayland::Server::PlasmaShellSurfaceInterface> m_plasmaShellSurface;
     QPointer<KWayland::Server::QtExtendedSurfaceInterface> m_qtExtendedSurface;
+    QPointer<KWayland::Server::AppMenuInterface> m_appMenuInterface;
+    QPointer<KWayland::Server::ServerSideDecorationPaletteInterface> m_paletteInterface;
     KWayland::Server::ServerSideDecorationInterface *m_serverDecoration = nullptr;
     bool m_userNoBorder = false;
     bool m_fullScreen = false;

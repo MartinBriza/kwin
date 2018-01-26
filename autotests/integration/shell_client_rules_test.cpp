@@ -45,6 +45,18 @@ private Q_SLOTS:
     void testApplyInitialDesktop();
     void testApplyInitialMinimize_data();
     void testApplyInitialMinimize();
+    void testApplyInitialSkipTaskbar_data();
+    void testApplyInitialSkipTaskbar();
+    void testApplyInitialSkipPager_data();
+    void testApplyInitialSkipPager();
+    void testApplyInitialSkipSwitcher_data();
+    void testApplyInitialSkipSwitcher();
+    void testApplyInitialKeepAbove_data();
+    void testApplyInitialKeepAbove();
+    void testApplyInitialKeepBelow_data();
+    void testApplyInitialKeepBelow();
+    void testApplyInitialShortcut_data();
+    void testApplyInitialShortcut();
 };
 
 void TestShellClientRules::initTestCase()
@@ -79,27 +91,26 @@ void TestShellClientRules::cleanup()
     Test::destroyWaylandConnection();
 }
 
-void TestShellClientRules::testApplyInitialDesktop_data()
-{
-    QTest::addColumn<Test::ShellSurfaceType>("type");
-    QTest::addColumn<int>("ruleNumber");
-
-    QTest::newRow("wlShell|Force") << Test::ShellSurfaceType::WlShell << 2;
-    QTest::newRow("xdgShellV5|Force") << Test::ShellSurfaceType::XdgShellV5 << 2;
-    QTest::newRow("xdgShellV6|Force") << Test::ShellSurfaceType::XdgShellV6 << 2;
-
-    QTest::newRow("wlShell|Apply") << Test::ShellSurfaceType::WlShell << 3;
-    QTest::newRow("xdgShellV5|Apply") << Test::ShellSurfaceType::XdgShellV5 << 3;
-    QTest::newRow("xdgShellV6|Apply") << Test::ShellSurfaceType::XdgShellV6 << 3;
-
-    QTest::newRow("wlShell|ApplyNow") << Test::ShellSurfaceType::WlShell << 5;
-    QTest::newRow("xdgShellV5|ApplyNow") << Test::ShellSurfaceType::XdgShellV5 << 5;
-    QTest::newRow("xdgShellV6|ApplyNow") << Test::ShellSurfaceType::XdgShellV6 << 5;
-
-    QTest::newRow("wlShell|ForceTemporarily") << Test::ShellSurfaceType::WlShell << 6;
-    QTest::newRow("xdgShellV5|ForceTemporarily") << Test::ShellSurfaceType::XdgShellV5 << 6;
-    QTest::newRow("xdgShellV6|ForceTemporarily") << Test::ShellSurfaceType::XdgShellV6 << 6;
+#define TEST_DATA( name ) \
+void TestShellClientRules::name##_data() \
+{ \
+    QTest::addColumn<Test::ShellSurfaceType>("type"); \
+    QTest::addColumn<int>("ruleNumber"); \
+    QTest::newRow("wlShell|Force") << Test::ShellSurfaceType::WlShell << 2; \
+    QTest::newRow("xdgShellV5|Force") << Test::ShellSurfaceType::XdgShellV5 << 2; \
+    QTest::newRow("xdgShellV6|Force") << Test::ShellSurfaceType::XdgShellV6 << 2; \
+    QTest::newRow("wlShell|Apply") << Test::ShellSurfaceType::WlShell << 3; \
+    QTest::newRow("xdgShellV5|Apply") << Test::ShellSurfaceType::XdgShellV5 << 3; \
+    QTest::newRow("xdgShellV6|Apply") << Test::ShellSurfaceType::XdgShellV6 << 3; \
+    QTest::newRow("wlShell|ApplyNow") << Test::ShellSurfaceType::WlShell << 5; \
+    QTest::newRow("xdgShellV5|ApplyNow") << Test::ShellSurfaceType::XdgShellV5 << 5; \
+    QTest::newRow("xdgShellV6|ApplyNow") << Test::ShellSurfaceType::XdgShellV6 << 5; \
+    QTest::newRow("wlShell|ForceTemporarily") << Test::ShellSurfaceType::WlShell << 6; \
+    QTest::newRow("xdgShellV5|ForceTemporarily") << Test::ShellSurfaceType::XdgShellV5 << 6; \
+    QTest::newRow("xdgShellV6|ForceTemporarily") << Test::ShellSurfaceType::XdgShellV6 << 6; \
 }
+
+TEST_DATA(testApplyInitialDesktop)
 
 void TestShellClientRules::testApplyInitialDesktop()
 {
@@ -121,29 +132,15 @@ void TestShellClientRules::testApplyInitialDesktop()
     QCOMPARE(c->desktop(), 2);
     QCOMPARE(c->isMinimized(), false);
     QCOMPARE(c->isActive(), true);
+    QCOMPARE(c->skipTaskbar(), false);
+    QCOMPARE(c->skipPager(), false);
+    QCOMPARE(c->skipSwitcher(), false);
+    QCOMPARE(c->keepAbove(), false);
+    QCOMPARE(c->keepBelow(), false);
+    QCOMPARE(c->shortcut(), QKeySequence());
 }
 
-void TestShellClientRules::testApplyInitialMinimize_data()
-{
-    QTest::addColumn<Test::ShellSurfaceType>("type");
-    QTest::addColumn<int>("ruleNumber");
-
-    QTest::newRow("wlShell|Force") << Test::ShellSurfaceType::WlShell << 2;
-    QTest::newRow("xdgShellV5|Force") << Test::ShellSurfaceType::XdgShellV5 << 2;
-    QTest::newRow("xdgShellV6|Force") << Test::ShellSurfaceType::XdgShellV6 << 2;
-
-    QTest::newRow("wlShell|Apply") << Test::ShellSurfaceType::WlShell << 3;
-    QTest::newRow("xdgShellV5|Apply") << Test::ShellSurfaceType::XdgShellV5 << 3;
-    QTest::newRow("xdgShellV6|Apply") << Test::ShellSurfaceType::XdgShellV6 << 3;
-
-    QTest::newRow("wlShell|ApplyNow") << Test::ShellSurfaceType::WlShell << 5;
-    QTest::newRow("xdgShellV5|ApplyNow") << Test::ShellSurfaceType::XdgShellV5 << 5;
-    QTest::newRow("xdgShellV6|ApplyNow") << Test::ShellSurfaceType::XdgShellV6 << 5;
-
-    QTest::newRow("wlShell|ForceTemporarily") << Test::ShellSurfaceType::WlShell << 6;
-    QTest::newRow("xdgShellV5|ForceTemporarily") << Test::ShellSurfaceType::XdgShellV5 << 6;
-    QTest::newRow("xdgShellV6|ForceTemporarily") << Test::ShellSurfaceType::XdgShellV6 << 6;
-}
+TEST_DATA(testApplyInitialMinimize)
 
 void TestShellClientRules::testApplyInitialMinimize()
 {
@@ -163,6 +160,169 @@ void TestShellClientRules::testApplyInitialMinimize()
     QCOMPARE(c->isActive(), false);
     c->setMinimized(false);
     QCOMPARE(c->isMinimized(), false);
+    QCOMPARE(c->skipTaskbar(), false);
+    QCOMPARE(c->skipPager(), false);
+    QCOMPARE(c->skipSwitcher(), false);
+    QCOMPARE(c->keepAbove(), false);
+    QCOMPARE(c->keepBelow(), false);
+    QCOMPARE(c->shortcut(), QKeySequence());
+}
+
+TEST_DATA(testApplyInitialSkipTaskbar)
+
+void TestShellClientRules::testApplyInitialSkipTaskbar()
+{
+    // install the temporary rule
+    QFETCH(int, ruleNumber);
+    QString rule = QStringLiteral("skiptaskbar=true\nskiptaskbarrule=%1").arg(ruleNumber);
+    QMetaObject::invokeMethod(RuleBook::self(), "temporaryRulesMessage", Q_ARG(QString, rule));
+
+    QScopedPointer<Surface> surface(Test::createSurface());
+    QFETCH(Test::ShellSurfaceType, type);
+    QScopedPointer<QObject> shellSurface(Test::createShellSurface(type, surface.data()));
+
+    auto c = Test::renderAndWaitForShown(surface.data(), QSize(100, 50), Qt::blue);
+    QVERIFY(c);
+    QCOMPARE(c->desktop(), 1);
+    QCOMPARE(c->isMinimized(), false);
+    QCOMPARE(c->isActive(), true);
+    QCOMPARE(c->skipTaskbar(), true);
+    QCOMPARE(c->skipPager(), false);
+    QCOMPARE(c->skipSwitcher(), false);
+    QCOMPARE(c->keepAbove(), false);
+    QCOMPARE(c->keepBelow(), false);
+    QCOMPARE(c->shortcut(), QKeySequence());
+}
+
+TEST_DATA(testApplyInitialSkipPager)
+
+void TestShellClientRules::testApplyInitialSkipPager()
+{
+    // install the temporary rule
+    QFETCH(int, ruleNumber);
+    QString rule = QStringLiteral("skippager=true\nskippagerrule=%1").arg(ruleNumber);
+    QMetaObject::invokeMethod(RuleBook::self(), "temporaryRulesMessage", Q_ARG(QString, rule));
+
+    QScopedPointer<Surface> surface(Test::createSurface());
+    QFETCH(Test::ShellSurfaceType, type);
+    QScopedPointer<QObject> shellSurface(Test::createShellSurface(type, surface.data()));
+
+    auto c = Test::renderAndWaitForShown(surface.data(), QSize(100, 50), Qt::blue);
+    QVERIFY(c);
+    QCOMPARE(c->desktop(), 1);
+    QCOMPARE(c->isMinimized(), false);
+    QCOMPARE(c->isActive(), true);
+    QCOMPARE(c->skipTaskbar(), false);
+    QCOMPARE(c->skipPager(), true);
+    QCOMPARE(c->skipSwitcher(), false);
+    QCOMPARE(c->keepAbove(), false);
+    QCOMPARE(c->keepBelow(), false);
+    QCOMPARE(c->shortcut(), QKeySequence());
+}
+
+TEST_DATA(testApplyInitialSkipSwitcher)
+
+void TestShellClientRules::testApplyInitialSkipSwitcher()
+{
+    // install the temporary rule
+    QFETCH(int, ruleNumber);
+    QString rule = QStringLiteral("skipswitcher=true\nskipswitcherrule=%1").arg(ruleNumber);
+    QMetaObject::invokeMethod(RuleBook::self(), "temporaryRulesMessage", Q_ARG(QString, rule));
+
+    QScopedPointer<Surface> surface(Test::createSurface());
+    QFETCH(Test::ShellSurfaceType, type);
+    QScopedPointer<QObject> shellSurface(Test::createShellSurface(type, surface.data()));
+
+    auto c = Test::renderAndWaitForShown(surface.data(), QSize(100, 50), Qt::blue);
+    QVERIFY(c);
+    QCOMPARE(c->desktop(), 1);
+    QCOMPARE(c->isMinimized(), false);
+    QCOMPARE(c->isActive(), true);
+    QCOMPARE(c->skipTaskbar(), false);
+    QCOMPARE(c->skipPager(), false);
+    QCOMPARE(c->skipSwitcher(), true);
+    QCOMPARE(c->keepAbove(), false);
+    QCOMPARE(c->keepBelow(), false);
+    QCOMPARE(c->shortcut(), QKeySequence());
+}
+
+TEST_DATA(testApplyInitialKeepAbove)
+
+void TestShellClientRules::testApplyInitialKeepAbove()
+{
+    // install the temporary rule
+    QFETCH(int, ruleNumber);
+    QString rule = QStringLiteral("above=true\naboverule=%1").arg(ruleNumber);
+    QMetaObject::invokeMethod(RuleBook::self(), "temporaryRulesMessage", Q_ARG(QString, rule));
+
+    QScopedPointer<Surface> surface(Test::createSurface());
+    QFETCH(Test::ShellSurfaceType, type);
+    QScopedPointer<QObject> shellSurface(Test::createShellSurface(type, surface.data()));
+
+    auto c = Test::renderAndWaitForShown(surface.data(), QSize(100, 50), Qt::blue);
+    QVERIFY(c);
+    QCOMPARE(c->desktop(), 1);
+    QCOMPARE(c->isMinimized(), false);
+    QCOMPARE(c->isActive(), true);
+    QCOMPARE(c->skipTaskbar(), false);
+    QCOMPARE(c->skipPager(), false);
+    QCOMPARE(c->skipSwitcher(), false);
+    QCOMPARE(c->keepAbove(), true);
+    QCOMPARE(c->keepBelow(), false);
+    QCOMPARE(c->shortcut(), QKeySequence());
+}
+
+TEST_DATA(testApplyInitialKeepBelow)
+
+void TestShellClientRules::testApplyInitialKeepBelow()
+{
+    // install the temporary rule
+    QFETCH(int, ruleNumber);
+    QString rule = QStringLiteral("below=true\nbelowrule=%1").arg(ruleNumber);
+    QMetaObject::invokeMethod(RuleBook::self(), "temporaryRulesMessage", Q_ARG(QString, rule));
+
+    QScopedPointer<Surface> surface(Test::createSurface());
+    QFETCH(Test::ShellSurfaceType, type);
+    QScopedPointer<QObject> shellSurface(Test::createShellSurface(type, surface.data()));
+
+    auto c = Test::renderAndWaitForShown(surface.data(), QSize(100, 50), Qt::blue);
+    QVERIFY(c);
+    QCOMPARE(c->desktop(), 1);
+    QCOMPARE(c->isMinimized(), false);
+    QCOMPARE(c->isActive(), true);
+    QCOMPARE(c->skipTaskbar(), false);
+    QCOMPARE(c->skipPager(), false);
+    QCOMPARE(c->skipSwitcher(), false);
+    QCOMPARE(c->keepAbove(), false);
+    QCOMPARE(c->keepBelow(), true);
+    QCOMPARE(c->shortcut(), QKeySequence());
+}
+
+TEST_DATA(testApplyInitialShortcut)
+
+void TestShellClientRules::testApplyInitialShortcut()
+{
+    // install the temporary rule
+    QFETCH(int, ruleNumber);
+    const QKeySequence sequence{Qt::ControlModifier + Qt::ShiftModifier + Qt::MetaModifier + Qt::AltModifier + Qt::Key_Space};
+    QString rule = QStringLiteral("shortcut=%1\nshortcutrule=%2").arg(sequence.toString()).arg(ruleNumber);
+    QMetaObject::invokeMethod(RuleBook::self(), "temporaryRulesMessage", Q_ARG(QString, rule));
+
+    QScopedPointer<Surface> surface(Test::createSurface());
+    QFETCH(Test::ShellSurfaceType, type);
+    QScopedPointer<QObject> shellSurface(Test::createShellSurface(type, surface.data()));
+
+    auto c = Test::renderAndWaitForShown(surface.data(), QSize(100, 50), Qt::blue);
+    QVERIFY(c);
+    QCOMPARE(c->desktop(), 1);
+    QCOMPARE(c->isMinimized(), false);
+    QCOMPARE(c->isActive(), true);
+    QCOMPARE(c->skipTaskbar(), false);
+    QCOMPARE(c->skipPager(), false);
+    QCOMPARE(c->skipSwitcher(), false);
+    QCOMPARE(c->keepAbove(), false);
+    QCOMPARE(c->keepBelow(), false);
+    QCOMPARE(c->shortcut(), sequence);
 }
 
 WAYLANDTEST_MAIN(TestShellClientRules)

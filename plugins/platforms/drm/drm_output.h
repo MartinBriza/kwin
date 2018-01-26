@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "drm_pointer.h"
 #include "drm_object.h"
+#include "drm_object_plane.h"
 
 #include <QObject>
 #include <QPoint>
@@ -29,6 +30,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <QSize>
 #include <QVector>
 #include <xf86drmMode.h>
+
+#include <KWayland/Server/outputdevice_interface.h>
 
 namespace KWayland
 {
@@ -64,11 +67,22 @@ public:
     virtual ~DrmOutput();
     void releaseGbm();
     void showCursor(DrmDumbBuffer *buffer);
+    void showCursor();
     void hideCursor();
+    void updateCursor();
     void moveCursor(const QPoint &globalPos);
     bool init(drmModeConnector *connector);
     bool present(DrmBuffer *buffer);
     void pageFlipped();
+
+    /**
+     * Enable or disable the output.
+     * This differs from setDpms as it also
+     * removes the wl_output
+     * The default is on
+     */
+    void setEnabled(bool enabled);
+    bool isEnabled() const;
 
     /**
      * This sets the changes and tests them against the DRM output
@@ -103,12 +117,23 @@ public:
         return m_uuid;
     }
 
-    QSize physicalSize() const {
-        return m_physicalSize;
+    QSize physicalSize() const;
+
+    bool initCursor(const QSize &cursorSize);
+
+    bool supportsTransformations() const;
+
+    bool isInternal() const {
+        return m_internal;
+    }
+
+    Qt::ScreenOrientation orientation() const {
+        return m_orientation;
     }
 
 Q_SIGNALS:
     void dpmsChanged();
+    void modeChanged();
 
 private:
     friend class RemoteAccessManager;
@@ -128,11 +153,13 @@ private:
     bool setModeLegacy(DrmBuffer *buffer);
     void initEdid(drmModeConnector *connector);
     void initDpms(drmModeConnector *connector);
+    void initOutputDevice(drmModeConnector *connector);
+
     bool isCurrentMode(const drmModeModeInfo *mode) const;
     void initUuid();
     void setGlobalPos(const QPoint &pos);
     void setScale(qreal scale);
-
+    void initOutput();
     bool initPrimaryPlane();
     bool initCursorPlane();
 
@@ -140,6 +167,10 @@ private:
     void dpmsOffHandler();
     bool dpmsAtomicOff();
     bool atomicReqModesetPopulate(drmModeAtomicReq *req, bool enable);
+    void updateMode(int modeIndex);
+
+    void transform(KWayland::Server::OutputDeviceInterface::Transform transform);
+    void automaticRotation();
 
     DrmBackend *m_backend;
     DrmConnector *m_conn = nullptr;
@@ -165,6 +196,19 @@ private:
     bool m_dpmsAtomicOffPending = false;
     bool m_modesetRequested = true;
     QSize m_physicalSize;
+    Qt::ScreenOrientation m_orientation = Qt::PrimaryOrientation;
+
+    struct {
+        Qt::ScreenOrientation orientation;
+        drmModeModeInfo mode;
+        DrmPlane::Transformations planeTransformations;
+        QPoint globalPos;
+        bool valid = false;
+    } m_lastWorkingState;
+    DrmDumbBuffer *m_cursor[2] = {nullptr, nullptr};
+    int m_cursorIndex = 0;
+    bool m_hasNewCursor = false;
+    bool m_internal = false;
 };
 
 }

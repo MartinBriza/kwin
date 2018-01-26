@@ -367,7 +367,8 @@ public:
     virtual bool isHiddenInternal() const = 0;
     // TODO: remove boolean trap
     virtual void hideClient(bool hide) = 0;
-    virtual bool isFullScreenable() const = 0;
+    bool isFullScreenable() const;
+    bool isFullScreenable(bool fullscreen_hack) const;
     virtual bool isFullScreen() const = 0;
     // TODO: remove boolean trap
     virtual AbstractClient *findModal(bool allow_itself = false) = 0;
@@ -460,6 +461,7 @@ public:
     virtual QRect iconGeometry() const;
     virtual bool userCanSetFullScreen() const = 0;
     virtual bool userCanSetNoBorder() const = 0;
+    virtual void checkNoBorder();
     virtual void setOnActivities(QStringList newActivitiesList);
     virtual void setOnAllActivities(bool set) = 0;
     const WindowRules* rules() const {
@@ -654,8 +656,12 @@ public:
      **/
     virtual void killWindow() = 0;
 
-    // TODO: remove boolean trap
-    static bool belongToSameApplication(const AbstractClient* c1, const AbstractClient* c2, bool active_hack = false);
+    enum class SameApplicationCheck {
+        RelaxedForActive = 1 << 0,
+        AllowCrossProcesses = 1 << 1
+    };
+    Q_DECLARE_FLAGS(SameApplicationChecks, SameApplicationCheck)
+    static bool belongToSameApplication(const AbstractClient* c1, const AbstractClient* c2, SameApplicationChecks checks = SameApplicationChecks());
 
     bool hasApplicationMenu() const;
     bool applicationMenuActive() const {
@@ -776,8 +782,7 @@ protected:
      * Default implementation does nothig.
      **/
     virtual void doMinimize();
-    // TODO: remove boolean trap
-    virtual bool belongsToSameApplication(const AbstractClient *other, bool active_hack) const = 0;
+    virtual bool belongsToSameApplication(const AbstractClient *other, SameApplicationChecks checks) const = 0;
 
     virtual void doSetSkipTaskbar();
     virtual void doSetSkipPager();
@@ -798,7 +803,7 @@ protected:
     Layer belongsToLayer() const;
     virtual bool belongsToDesktop() const;
     void invalidateLayer();
-    virtual bool isActiveFullScreen() const;
+    bool isActiveFullScreen() const;
     virtual Layer layerForDock() const;
 
     // electric border / quick tiling
@@ -1172,5 +1177,6 @@ inline void AbstractClient::setPendingGeometryUpdate(PendingGeometry_t update)
 
 Q_DECLARE_METATYPE(KWin::AbstractClient*)
 Q_DECLARE_METATYPE(QList<KWin::AbstractClient*>)
+Q_DECLARE_OPERATORS_FOR_FLAGS(KWin::AbstractClient::SameApplicationChecks)
 
 #endif

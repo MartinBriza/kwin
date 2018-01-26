@@ -149,8 +149,6 @@ public:
 
     void setFullScreen(bool set, bool user = true) override;
     bool isFullScreen() const override;
-    bool isFullScreenable() const override;
-    bool isFullScreenable(bool fullscreen_hack) const;
     bool userCanSetFullScreen() const override;
     QRect geometryFSRestore() const {
         return geom_fs_restore;    // Only for session saving
@@ -162,7 +160,7 @@ public:
     bool noBorder() const override;
     void setNoBorder(bool set) override;
     bool userCanSetNoBorder() const override;
-    void checkNoBorder();
+    void checkNoBorder() override;
 
     int sessionStackingOrder() const;
 
@@ -240,7 +238,7 @@ public:
     /// Does 'delete c;'
     static void deleteClient(Client* c);
 
-    static bool belongToSameApplication(const Client* c1, const Client* c2, bool active_hack = false);
+    static bool belongToSameApplication(const Client* c1, const Client* c2, SameApplicationChecks checks = SameApplicationChecks());
     static bool sameAppWindowRoleMatch(const Client* c1, const Client* c2, bool active_hack);
 
     void killWindow() override;
@@ -382,7 +380,7 @@ private:
 protected:
     virtual void debug(QDebug& stream) const;
     void addDamage(const QRegion &damage) override;
-    bool belongsToSameApplication(const AbstractClient *other, bool active_hack) const override;
+    bool belongsToSameApplication(const AbstractClient *other, SameApplicationChecks checks) const override;
     void doSetActive() override;
     void doSetKeepAbove() override;
     void doSetKeepBelow() override;
@@ -391,7 +389,6 @@ protected:
     void doSetSkipPager() override;
     void doSetSkipTaskbar() override;
     bool belongsToDesktop() const override;
-    bool isActiveFullScreen() const override;
     void setGeometryRestore(const QRect &geo) override;
     void updateTabGroupStates(TabGroup::States states) override;
     void doMove(int x, int y) override;

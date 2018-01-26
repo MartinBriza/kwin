@@ -1095,17 +1095,49 @@ void GLRenderTarget::pushRenderTarget(GLRenderTarget* target)
     s_renderTargets.push(target);
 }
 
+void GLRenderTarget::pushRenderTargets(QStack <GLRenderTarget*> targets)
+{
+    if (s_renderTargets.isEmpty()) {
+        glGetIntegerv(GL_VIEWPORT, s_virtualScreenViewport);
+        s_renderTargets = targets;
+    } else {
+        s_renderTargets.reserve(s_renderTargets.size() + targets.size());
+
+        /*
+         * Merging the two stacks.
+         * We cheat a little bit by using the inherited QVector functions.
+         * This is to not have the targets stack in reverse order without
+         * having to use a helper QStack first to reverse the order.
+         */
+        while (!targets.isEmpty()) {
+            s_renderTargets.push(targets.first());
+            targets.removeFirst();
+        }
+    }
+
+    s_renderTargets.top()->enable();
+}
+
 GLRenderTarget* GLRenderTarget::popRenderTarget()
 {
     GLRenderTarget* ret = s_renderTargets.pop();
-    ret->disable();
+    ret->setTextureDirty();
 
     if (!s_renderTargets.isEmpty()) {
         s_renderTargets.top()->enable();
     } else {
+        ret->disable();
         glViewport (s_virtualScreenViewport[0], s_virtualScreenViewport[1], s_virtualScreenViewport[2], s_virtualScreenViewport[3]);
     }
+
     return ret;
+}
+
+GLRenderTarget::GLRenderTarget()
+{
+    // Reset variables
+    mValid = false;
+    mTexture = GLTexture();
 }
 
 GLRenderTarget::GLRenderTarget(const GLTexture& color)
@@ -1131,6 +1163,10 @@ GLRenderTarget::~GLRenderTarget()
 
 bool GLRenderTarget::enable()
 {
+    if (!mValid) {
+        initFBO();
+    }
+
     if (!valid()) {
         qCCritical(LIBKWINGLUTILS) << "Can't enable invalid render target!";
         return false;
@@ -1145,6 +1181,10 @@ bool GLRenderTarget::enable()
 
 bool GLRenderTarget::disable()
 {
+    if (!mValid) {
+        initFBO();
+    }
+
     if (!valid()) {
         qCCritical(LIBKWINGLUTILS) << "Can't disable invalid render target!";
         return false;
@@ -1249,6 +1289,11 @@ void GLRenderTarget::blitFromFramebuffer(const QRect &source, const QRect &desti
     if (!GLRenderTarget::blitSupported()) {
         return;
     }
+
+    if (!mValid) {
+        initFBO();
+    }
+
     GLRenderTarget::pushRenderTarget(this);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mFramebuffer);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
@@ -1256,9 +1301,9 @@ void GLRenderTarget::blitFromFramebuffer(const QRect &source, const QRect &desti
     const QRect d = destination.isNull() ? QRect(0, 0, mTexture.width(), mTexture.height()) : destination;
 
     glBlitFramebuffer((s.x() - s_virtualScreenGeometry.x()) * s_virtualScreenScale,
-                      (s_virtualScreenGeometry.height() - s_virtualScreenGeometry.y() - s.y() - s.height()) * s_virtualScreenScale,
+                      (s_virtualScreenGeometry.height() - s_virtualScreenGeometry.y() + s.y() - s.height()) * s_virtualScreenScale,
                       (s.x() - s_virtualScreenGeometry.x() + s.width()) * s_virtualScreenScale,
-                      (s_virtualScreenGeometry.height() - s_virtualScreenGeometry.y() - s.y()) * s_virtualScreenScale,
+                      (s_virtualScreenGeometry.height() - s_virtualScreenGeometry.y() + s.y()) * s_virtualScreenScale,
                       d.x(), mTexture.height() - d.y() - d.height(), d.x() + d.width(), mTexture.height() - d.y(),
                       GL_COLOR_BUFFER_BIT, filter);
     GLRenderTarget::popRenderTarget();
@@ -1266,7 +1311,11 @@ void GLRenderTarget::blitFromFramebuffer(const QRect &source, const QRect &desti
 
 void GLRenderTarget::attachTexture(const GLTexture& target)
 {
-    if (!mValid || mTexture.texture() == target.texture()) {
+    if (!mValid) {
+        initFBO();
+    }
+
+    if (mTexture.texture() == target.texture()) {
         return;
     }
 
@@ -1275,6 +1324,20 @@ void GLRenderTarget::attachTexture(const GLTexture& target)
     mTexture = target;
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            mTexture.target(), mTexture.texture(), 0);
+
+    popRenderTarget();
+}
+
+void GLRenderTarget::detachTexture()
+{
+    if (mTexture.isNull()) {
+        return;
+    }
+
+    pushRenderTarget(this);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           mTexture.target(), 0, 0);
 
     popRenderTarget();
 }
@@ -1950,6 +2013,7 @@ GLvoid *GLVertexBufferPrivate::mapNextFreeRange(size_t size)
 // GLVertexBuffer
 //*********************************
 QRect GLVertexBuffer::s_virtualScreenGeometry;
+qreal GLVertexBuffer::s_virtualScreenScale;
 
 GLVertexBuffer::GLVertexBuffer(UsageHint hint)
     : d(new GLVertexBufferPrivate(hint))
@@ -2122,8 +2186,11 @@ void GLVertexBuffer::draw(const QRegion &region, GLenum primitiveMode, int first
             glDrawElementsBaseVertex(GL_TRIANGLES, count, GL_UNSIGNED_SHORT, nullptr, first);
         } else {
             // Clip using scissoring
-            foreach (const QRect &r, region.rects()) {
-                glScissor(r.x() - s_virtualScreenGeometry.x(), s_virtualScreenGeometry.height() - s_virtualScreenGeometry.y() - r.y() - r.height(), r.width(), r.height());
+            for (const QRect &r : region) {
+                glScissor((r.x() - s_virtualScreenGeometry.x()) * s_virtualScreenScale,
+                (s_virtualScreenGeometry.height() + s_virtualScreenGeometry.y() - r.y() - r.height()) * s_virtualScreenScale,
+                r.width() * s_virtualScreenScale,
+                r.height() * s_virtualScreenScale);
                 glDrawElementsBaseVertex(GL_TRIANGLES, count, GL_UNSIGNED_SHORT, nullptr, first);
             }
         }
@@ -2134,8 +2201,11 @@ void GLVertexBuffer::draw(const QRegion &region, GLenum primitiveMode, int first
         glDrawArrays(primitiveMode, first, count);
     } else {
         // Clip using scissoring
-        foreach (const QRect &r, region.rects()) {
-            glScissor(r.x() - s_virtualScreenGeometry.x(), s_virtualScreenGeometry.height()  - s_virtualScreenGeometry.y() - r.y() - r.height(), r.width(), r.height());
+        for (const QRect &r : region) {
+            glScissor((r.x() - s_virtualScreenGeometry.x()) * s_virtualScreenScale,
+                      (s_virtualScreenGeometry.height()  + s_virtualScreenGeometry.y() - r.y() - r.height()) * s_virtualScreenScale,
+                      r.width() * s_virtualScreenScale,
+                      r.height() * s_virtualScreenScale);
             glDrawArrays(primitiveMode, first, count);
         }
     }

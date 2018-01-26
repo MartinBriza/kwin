@@ -448,9 +448,7 @@ void SceneOpenGL::initDebugOutput()
             if (strstr(message, "Buffer detailed info:") && strstr(message, "has been updated"))
                 scheduleVboReInit();
             // fall through! for general message printing
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 8, 0))
             Q_FALLTHROUGH();
-#endif
         case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
         case GL_DEBUG_TYPE_PORTABILITY:
         case GL_DEBUG_TYPE_PERFORMANCE:
@@ -664,6 +662,7 @@ qint64 SceneOpenGL::paint(QRegion damage, ToplevelList toplevels)
             QRegion repaint = m_backend->prepareRenderingForScreen(i);
             GLVertexBuffer::setVirtualScreenGeometry(geo);
             GLRenderTarget::setVirtualScreenGeometry(geo);
+            GLVertexBuffer::setVirtualScreenScale(screens()->scale(i));
             GLRenderTarget::setVirtualScreenScale(screens()->scale(i));
 
             const GLenum status = glGetGraphicsResetStatus();
@@ -694,6 +693,7 @@ qint64 SceneOpenGL::paint(QRegion damage, ToplevelList toplevels)
         }
         GLVertexBuffer::setVirtualScreenGeometry(screens()->geometry());
         GLRenderTarget::setVirtualScreenGeometry(screens()->geometry());
+        GLVertexBuffer::setVirtualScreenScale(1);
         GLRenderTarget::setVirtualScreenScale(1);
 
         int mask = 0;
@@ -798,7 +798,7 @@ void SceneOpenGL::extendPaintRegion(QRegion &region, bool opaqueFullscreen)
         // movie aspect - two times ;-) It's a Fox format, though, so maybe we want to restrict
         // to 2.20:1 - Panavision - which has actually been used for interesting movies ...)
         // would be 57% of 5/4
-        foreach (const QRect &r, region.rects()) {
+        for (const QRect &r : region) {
 //                 damagedPixels += r.width() * r.height(); // combined window damage test
             damagedPixels = r.width() * r.height(); // experimental single window damage testing
             if (damagedPixels > fullRepaintLimit) {
@@ -1178,7 +1178,7 @@ bool SceneOpenGL::Window::beginRenderWindow(int mask, const QRegion &region, Win
         const QRegion filterRegion = region.translated(-x(), -y());
         // split all quads in bounding rect with the actual rects in the region
         foreach (const WindowQuad &quad, data.quads) {
-            foreach (const QRect &r, filterRegion.rects()) {
+            for (const QRect &r : filterRegion) {
                 const QRectF rf(r);
                 const QRectF quadRect(QPointF(quad.left(), quad.top()), QPointF(quad.right(), quad.bottom()));
                 const QRectF &intersected = rf.intersected(quadRect);
@@ -1358,7 +1358,7 @@ QMatrix4x4 SceneOpenGL2Window::modelViewProjectionMatrix(int mask, const WindowP
     return scene->projectionMatrix() * mvMatrix;
 }
 
-static void renderSubSurface(GLShader *shader, const QMatrix4x4 &mvp, const QMatrix4x4 &windowMatrix, OpenGLWindowPixmap *pixmap)
+static void renderSubSurface(GLShader *shader, const QMatrix4x4 &mvp, const QMatrix4x4 &windowMatrix, OpenGLWindowPixmap *pixmap, const QRegion &region, bool hardwareClipping)
 {
     QMatrix4x4 newWindowMatrix = windowMatrix;
     newWindowMatrix.translate(pixmap->subSurface()->position().x(), pixmap->subSurface()->position().y());
@@ -1373,7 +1373,7 @@ static void renderSubSurface(GLShader *shader, const QMatrix4x4 &mvp, const QMat
         shader->setUniform(GLShader::ModelViewProjectionMatrix, mvp * newWindowMatrix);
         auto texture = pixmap->texture();
         texture->bind();
-        texture->render(QRegion(), QRect(0, 0, texture->width() / scale, texture->height() / scale));
+        texture->render(region, QRect(0, 0, texture->width() / scale, texture->height() / scale), hardwareClipping);
         texture->unbind();
     }
 
@@ -1382,7 +1382,7 @@ static void renderSubSurface(GLShader *shader, const QMatrix4x4 &mvp, const QMat
         if (pixmap->subSurface().isNull() || pixmap->subSurface()->surface().isNull() || !pixmap->subSurface()->surface()->isMapped()) {
             continue;
         }
-        renderSubSurface(shader, mvp, newWindowMatrix, static_cast<OpenGLWindowPixmap*>(pixmap));
+        renderSubSurface(shader, mvp, newWindowMatrix, static_cast<OpenGLWindowPixmap*>(pixmap), region, hardwareClipping);
     }
 }
 
@@ -1525,7 +1525,7 @@ void SceneOpenGL2Window::performPaint(int mask, QRegion region, WindowPaintData 
         if (pixmap->subSurface().isNull() || pixmap->subSurface()->surface().isNull() || !pixmap->subSurface()->surface()->isMapped()) {
             continue;
         }
-        renderSubSurface(shader, modelViewProjection, windowMatrix, static_cast<OpenGLWindowPixmap*>(pixmap));
+        renderSubSurface(shader, modelViewProjection, windowMatrix, static_cast<OpenGLWindowPixmap*>(pixmap), region, m_hardwareClipping);
     }
 
     if (!data.shader)
@@ -2336,13 +2336,16 @@ SceneOpenGLDecorationRenderer::~SceneOpenGLDecorationRenderer() = default;
 // and flips it vertically
 static QImage rotate(const QImage &srcImage, const QRect &srcRect)
 {
-    QImage image(srcRect.height(), srcRect.width(), srcImage.format());
+    auto dpr = srcImage.devicePixelRatio();
+    QImage image(srcRect.height() * dpr, srcRect.width() * dpr, srcImage.format());
+    image.setDevicePixelRatio(dpr);
+    const QPoint srcPoint(srcRect.x() * dpr, srcRect.y() * dpr);
 
     const uint32_t *src = reinterpret_cast<const uint32_t *>(srcImage.bits());
     uint32_t *dst = reinterpret_cast<uint32_t *>(image.bits());
 
     for (int x = 0; x < image.width(); x++) {
-        const uint32_t *s = src + (srcRect.y() + x) * srcImage.width() + srcRect.x();
+        const uint32_t *s = src + (srcPoint.y() + x) * srcImage.width() + srcPoint.x();
         uint32_t *d = dst + x;
 
         for (int y = 0; y < image.height(); y++) {
@@ -2357,10 +2360,10 @@ static QImage rotate(const QImage &srcImage, const QRect &srcRect)
 void SceneOpenGLDecorationRenderer::render()
 {
     const QRegion scheduled = getScheduled();
-    if (scheduled.isEmpty()) {
+    const bool dirty = areImageSizesDirty();
+    if (scheduled.isEmpty() && !dirty) {
         return;
     }
-    const bool dirty = areImageSizesDirty();
     if (dirty) {
         resizeTexture();
         resetImageSizesDirty();
@@ -2385,7 +2388,7 @@ void SceneOpenGLDecorationRenderer::render()
             // TODO: get this done directly when rendering to the image
             image = rotate(image, QRect(geo.topLeft() - partRect.topLeft(), geo.size()));
         }
-        m_texture->update(image, geo.topLeft() - partRect.topLeft() + offset);
+        m_texture->update(image, (geo.topLeft() - partRect.topLeft() + offset) * image.devicePixelRatio());
     };
     renderPart(left.intersected(geometry), left, QPoint(0, top.height() + bottom.height() + 2), true);
     renderPart(top.intersected(geometry), top, QPoint(0, 0));
@@ -2411,6 +2414,7 @@ void SceneOpenGLDecorationRenderer::resizeTexture()
 
     size.rwidth() = align(size.width(), 128);
 
+    size *= client()->client()->screenScale();
     if (m_texture && m_texture->size() == size)
         return;
 

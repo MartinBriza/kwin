@@ -57,6 +57,8 @@ Event *Event::create(libinput_event *event)
     case LIBINPUT_EVENT_GESTURE_PINCH_UPDATE:
     case LIBINPUT_EVENT_GESTURE_PINCH_END:
         return new PinchGestureEvent(event, t);
+    case LIBINPUT_EVENT_SWITCH_TOGGLE:
+        return new SwitchEvent(event, t);
     default:
         return new Event(event, t);
     }
@@ -283,6 +285,38 @@ SwipeGestureEvent::SwipeGestureEvent(libinput_event *event, libinput_event_type 
 }
 
 SwipeGestureEvent::~SwipeGestureEvent() = default;
+
+SwitchEvent::SwitchEvent(libinput_event *event, libinput_event_type type)
+    : Event(event, type)
+    , m_switchEvent(libinput_event_get_switch_event(event))
+{
+}
+
+SwitchEvent::~SwitchEvent() = default;
+
+SwitchEvent::State SwitchEvent::state() const
+{
+    switch (libinput_event_switch_get_switch_state(m_switchEvent))
+    {
+    case LIBINPUT_SWITCH_STATE_OFF:
+        return State::Off;
+    case LIBINPUT_SWITCH_STATE_ON:
+        return State::On;
+    default:
+        Q_UNREACHABLE();
+    }
+    return State::Off;
+}
+
+quint32 SwitchEvent::time() const
+{
+    return libinput_event_switch_get_time(m_switchEvent);
+}
+
+quint64 SwitchEvent::timeMicroseconds() const
+{
+    return libinput_event_switch_get_time_usec(m_switchEvent);
+}
 
 }
 }

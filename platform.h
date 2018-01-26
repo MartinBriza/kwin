@@ -38,6 +38,10 @@ namespace KWayland {
 
 namespace KWin
 {
+namespace ColorCorrect {
+class Manager;
+struct GammaRamp;
+}
 
 class Edge;
 class Compositor;
@@ -383,6 +387,37 @@ public:
      **/
     virtual QVector<CompositingType> supportedCompositors() const = 0;
 
+    /**
+     * Whether gamma control is supported by the backend.
+     * @since 5.12
+     **/
+    bool supportsGammaControl() const {
+        return m_supportsGammaControl;
+    }
+
+    ColorCorrect::Manager *colorCorrectManager() {
+        return m_colorCorrect;
+    }
+
+    virtual int gammaRampSize(int screen) const {
+        Q_UNUSED(screen);
+        return 0;
+    }
+    virtual bool setGammaRamp(int screen, ColorCorrect::GammaRamp &gamma) {
+        Q_UNUSED(screen);
+        Q_UNUSED(gamma);
+        return false;
+    }
+
+    /*
+     * A string of information to include in kwin debug output
+     * It should not be translated.
+     *
+     * The base implementation prints the name.
+     * @since 5.12
+     */
+    virtual QString supportInformation() const;
+
 public Q_SLOTS:
     void pointerMotion(const QPointF &position, quint32 time);
     void pointerButtonPressed(quint32 button, quint32 time);
@@ -435,6 +470,9 @@ protected:
     void setSupportsPointerWarping(bool set) {
         m_pointerWarping = set;
     }
+    void setSupportsGammaControl(bool set) {
+        m_supportsGammaControl = set;
+    }
 
     /**
      * Actual platform specific way to hide the cursor.
@@ -479,6 +517,8 @@ private:
     EGLContext m_context = EGL_NO_CONTEXT;
     EGLSurface m_surface = EGL_NO_SURFACE;
     int m_hideCursorCounter = 0;
+    ColorCorrect::Manager *m_colorCorrect = nullptr;
+    bool m_supportsGammaControl = false;
 };
 
 }

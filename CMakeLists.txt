@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 project(KWIN)
-set(PROJECT_VERSION "5.11.90")
+set(PROJECT_VERSION "5.12.80")
 set(PROJECT_VERSION_MAJOR 5)
 
-set(QT_MIN_VERSION "5.7.0")
-set(KF5_MIN_VERSION "5.34.0")
+set(QT_MIN_VERSION "5.9.0")
+set(KF5_MIN_VERSION "5.42.0")
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules ${CMAKE_MODULE_PATH} )
 
-find_package(ECM 0.0.11 REQUIRED NO_MODULE)
+find_package(ECM 5.38 REQUIRED NO_MODULE)
 
 include(FeatureSummary)
 include(WriteBasicConfigVersionFile)
@@ -24,6 +24,7 @@ find_package(Qt5 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     DBus
     Quick
     QuickWidgets
+    Sensors
     Script
     UiTools
     Widgets
@@ -174,7 +175,7 @@ set_package_properties(XKB PROPERTIES
                        PURPOSE "Required for building KWin with Wayland support"
                       )
 
-find_package(Libinput 1.5)
+find_package(Libinput 1.9)
 set_package_properties(Libinput PROPERTIES TYPE OPTIONAL PURPOSE "Required for input handling on Wayland.")
 
 find_package(UDev)
@@ -250,13 +251,9 @@ set_package_properties(X11_XCB PROPERTIES
                        TYPE OPTIONAL)
 
 # dependencies for QPA plugin
-if(Qt5Core_VERSION VERSION_LESS "5.8.0")
-    find_package(Qt5PlatformSupport REQUIRED)
-else()
-    find_package(Qt5FontDatabaseSupport REQUIRED)
-    find_package(Qt5ThemeSupport REQUIRED)
-    find_package(Qt5EventDispatcherSupport REQUIRED)
-endif()
+find_package(Qt5FontDatabaseSupport REQUIRED)
+find_package(Qt5ThemeSupport REQUIRED)
+find_package(Qt5EventDispatcherSupport REQUIRED)
 
 find_package(Freetype REQUIRED)
 set_package_properties(Freetype PROPERTIES DESCRIPTION "A font rendering engine"
@@ -285,6 +282,17 @@ set_package_properties(Libcap PROPERTIES
     PURPOSE "Needed for running kwin_wayland with real-time scheduling policy"
 )
 set(HAVE_LIBCAP ${Libcap_FOUND})
+
+include(ECMQMLModules)
+ecm_find_qmlmodule(QtQuick 2.3)
+ecm_find_qmlmodule(QtQuick.Controls 1.2)
+ecm_find_qmlmodule(QtQuick.Layouts 1.3)
+ecm_find_qmlmodule(QtQuick.VirtualKeyboard 2.1)
+ecm_find_qmlmodule(QtQuick.Window 2.1)
+ecm_find_qmlmodule(QtMultimedia 5.0)
+ecm_find_qmlmodule(org.kde.kquickcontrolsaddons 2.0)
+ecm_find_qmlmodule(org.kde.plasma.core 2.0)
+ecm_find_qmlmodule(org.kde.plasma.components 2.0)
 
 ########### configure tests ###############
 include(CMakeDependentOption)
@@ -463,13 +471,30 @@ set(kwin_KDEINIT_SRCS
     xkb.cpp
     gestures.cpp
     popup_input_filter.cpp
+    colorcorrection/manager.cpp
+    colorcorrection/colorcorrectdbusinterface.cpp
+    colorcorrection/suncalc.cpp
     abstract_opengl_context_attribute_builder.cpp
     egl_context_attribute_builder.cpp
     was_user_interaction_x11_filter.cpp
     moving_client_x11_filter.cpp
     window_property_notify_x11_filter.cpp
     rootinfo_filter.cpp
+    orientation_sensor.cpp
+    idle_inhibition.cpp
    )
+
+include(ECMQtDeclareLoggingCategory)
+ecm_qt_declare_logging_category(kwin_KDEINIT_SRCS
+    HEADER
+        colorcorrect_logging.h
+    IDENTIFIER
+        KWIN_COLORCORRECTION
+    CATEGORY_NAME
+        kwin_colorcorrection
+    DEFAULT_SEVERITY
+        Critical
+)
 
 if(KWIN_BUILD_TABBOX)
     set(
@@ -518,10 +543,13 @@ if(HAVE_INPUT)
 endif()
 
 kconfig_add_kcfg_files(kwin_KDEINIT_SRCS settings.kcfgc)
+kconfig_add_kcfg_files(kwin_KDEINIT_SRCS colorcorrection/colorcorrect_settings.kcfgc)
 
 qt5_add_dbus_adaptor( kwin_KDEINIT_SRCS org.kde.KWin.xml dbusinterface.h KWin::DBusInterface )
 qt5_add_dbus_adaptor( kwin_KDEINIT_SRCS org.kde.kwin.Compositing.xml dbusinterface.h KWin::CompositorDBusInterface )
+qt5_add_dbus_adaptor( kwin_KDEINIT_SRCS org.kde.kwin.ColorCorrect.xml colorcorrection/colorcorrectdbusinterface.h KWin::ColorCorrect::ColorCorrectDBusInterface )
 qt5_add_dbus_adaptor( kwin_KDEINIT_SRCS ${kwin_effects_dbus_xml} effects.h KWin::EffectsHandlerImpl )
+qt5_add_dbus_adaptor( kwin_KDEINIT_SRCS org.kde.kwin.OrientationSensor.xml orientation_sensor.h KWin::OrientationSensor)
 
 qt5_add_dbus_interface( kwin_KDEINIT_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/org.freedesktop.ScreenSaver.xml screenlocker_interface)
 
@@ -545,6 +573,7 @@ set(kwin_QT_LIBS
     Qt5::Concurrent
     Qt5::DBus
     Qt5::Quick
+    Qt5::Sensors
     Qt5::Script
 )
 
@@ -559,6 +588,7 @@ set(kwin_KDE_LIBS
     KF5::Package
     KF5::Plasma
     KF5::WindowSystem
+    KF5::QuickAddons
     KDecoration2::KDecoration
     KDecoration2::KDecoration2Private
     PW::KScreenLocker
@@ -633,7 +663,7 @@ install(TARGETS kwin             ${INSTALL_TARGETS_DEFAULT_ARGS} LIBRARY NAMELIN
 install(TARGETS kdeinit_kwin_x11 ${INSTALL_TARGETS_DEFAULT_ARGS} )
 install(TARGETS kwin_x11         ${INSTALL_TARGETS_DEFAULT_ARGS} )
 
-add_executable(kwin_wayland main_wayland.cpp)
+add_executable(kwin_wayland tabletmodemanager.cpp main_wayland.cpp)
 target_link_libraries(kwin_wayland kwin)
 if (HAVE_LIBCAP)
     target_link_libraries(kwin_wayland ${Libcap_LIBRARIES})
@@ -656,11 +686,13 @@ add_subdirectory(plugins)
 ########### install files ###############
 
 install( FILES kwin.kcfg  DESTINATION  ${KCFG_INSTALL_DIR} RENAME ${KWIN_NAME}.kcfg )
+install( FILES colorcorrection/colorcorrect_settings.kcfg  DESTINATION  ${KCFG_INSTALL_DIR} RENAME ${KWIN_NAME}_colorcorrect.kcfg )
 install( FILES kwin.notifyrc  DESTINATION  ${KNOTIFYRC_INSTALL_DIR} RENAME ${KWIN_NAME}.notifyrc)
 install(
     FILES
         org.kde.KWin.xml
         org.kde.kwin.Compositing.xml
+        org.kde.kwin.ColorCorrect.xml
         org.kde.kwin.Effects.xml
     DESTINATION
         ${KDE_INSTALL_DBUSINTERFACEDIR}

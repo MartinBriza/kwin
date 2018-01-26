@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <KConfigGroup>
 
 #include <QObject>
+#include <QMatrix4x4>
 #include <QSizeF>
 #include <QVector>
 
@@ -122,6 +123,11 @@ class Device : public QObject
     Q_PROPERTY(quint32 defaultScrollButton READ defaultScrollButton CONSTANT)
     Q_PROPERTY(bool scrollOnButtonDown READ isScrollOnButtonDown WRITE setScrollOnButtonDown NOTIFY scrollMethodChanged)
     Q_PROPERTY(quint32 scrollButton READ scrollButton WRITE setScrollButton NOTIFY scrollButtonChanged)
+
+    // switches
+    Q_PROPERTY(bool switchDevice READ isSwitch CONSTANT)
+    Q_PROPERTY(bool lidSwitch READ isLidSwitch CONSTANT)
+    Q_PROPERTY(bool tabletModeSwitch READ isTabletModeSwitch CONSTANT)
 
 
 public:
@@ -393,9 +399,37 @@ public:
     }
 
     /**
+     * The id of the screen in KWin identifiers. Set from KWin through @link setScreenId.
+     **/
+    int screenId() const {
+        return m_screenId;
+    }
+
+    /**
+     * Sets the KWin screen id for the device
+     **/
+    void setScreenId(int screenId) {
+        m_screenId = screenId;
+    }
+
+    void setOrientation(Qt::ScreenOrientation orientation);
+
+    /**
      * Loads the configuration and applies it to the Device
      **/
     void loadConfiguration();
+
+    bool isSwitch() const {
+        return m_switch;
+    }
+
+    bool isLidSwitch() const {
+        return m_lidSwitch;
+    }
+
+    bool isTabletModeSwitch() const {
+        return m_tabletSwitch;
+    }
 
     /**
      * All created Devices
@@ -436,6 +470,9 @@ private:
     bool m_tabletTool;
     bool m_tabletPad;
     bool m_supportsGesture;
+    bool m_switch = false;
+    bool m_lidSwitch = false;
+    bool m_tabletSwitch = false;
     QString m_name;
     QString m_sysName;
     QString m_outputName;
@@ -484,6 +521,10 @@ private:
 
     KConfigGroup m_config;
     bool m_loading = false;
+
+    int m_screenId = 0;
+    Qt::ScreenOrientation m_orientation = Qt::PrimaryOrientation;
+    QMatrix4x4 m_defaultCalibrationMatrix;
 
     static QVector<Device*> s_devices;
 };

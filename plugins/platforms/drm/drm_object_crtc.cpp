@@ -22,14 +22,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "drm_output.h"
 #include "drm_buffer.h"
 #include "logging.h"
+#include <colorcorrection/gammaramp.h>
 
 namespace KWin
 {
 
 DrmCrtc::DrmCrtc(uint32_t crtc_id, DrmBackend *backend, int resIndex)
-    : DrmObject(crtc_id, backend),
-      m_resIndex(resIndex)
+    : DrmObject(crtc_id, backend->fd()),
+      m_resIndex(resIndex),
+      m_backend(backend)
 {
+    ScopedDrmPointer<_drmModeCrtc, &drmModeFreeCrtc> modeCrtc(drmModeGetCrtc(backend->fd(), crtc_id));
+    if (modeCrtc) {
+        m_gammaRampSize = modeCrtc->gamma_size;
+    }
 }
 
 DrmCrtc::~DrmCrtc()
@@ -48,12 +54,12 @@ bool DrmCrtc::atomicInit()
 
 bool DrmCrtc::initProps()
 {
-    m_propsNames = {
+    setPropertyNames({
         QByteArrayLiteral("MODE_ID"),
         QByteArrayLiteral("ACTIVE"),
-    };
+    });
 
-    drmModeObjectProperties *properties = drmModeObjectGetProperties(m_backend->fd(), m_id, DRM_MODE_OBJECT_CRTC);
+    drmModeObjectProperties *properties = drmModeObjectGetProperties(fd(), m_id, DRM_MODE_OBJECT_CRTC);
     if (!properties) {
         qCWarning(KWIN_DRM) << "Failed to get properties for crtc " << m_id ;
         return false;
@@ -81,6 +87,9 @@ void DrmCrtc::flipBuffer()
 
 bool DrmCrtc::blank()
 {
+    if (!m_output) {
+        return false;
+    }
     if (!m_blackBuffer) {
         DrmDumbBuffer *blackBuffer = m_backend->createBuffer(m_output->pixelSize());
         if (!blackBuffer->map()) {
@@ -101,6 +110,12 @@ bool DrmCrtc::blank()
         return true;
     }
     return false;
+}
+
+bool DrmCrtc::setGammaRamp(ColorCorrect::GammaRamp &gamma) {
+    bool isError = drmModeCrtcSetGamma(m_backend->fd(), m_id, gamma.size,
+                                gamma.red, gamma.green, gamma.blue);
+    return !isError;
 }
 
 }

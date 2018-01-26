@@ -18,7 +18,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *********************************************************************/
 #include "drm_object_plane.h"
-#include "drm_backend.h"
 #include "drm_buffer.h"
 #include "drm_pointer.h"
 #include "logging.h"
@@ -26,8 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 namespace KWin
 {
 
-DrmPlane::DrmPlane(uint32_t plane_id, DrmBackend *backend)
-    : DrmObject(plane_id, backend)
+DrmPlane::DrmPlane(uint32_t plane_id, int fd)
+    : DrmObject(plane_id, fd)
 {
 }
 
@@ -40,7 +39,7 @@ DrmPlane::~DrmPlane()
 bool DrmPlane::atomicInit()
 {
     qCDebug(KWIN_DRM) << "Atomic init for plane:" << m_id;
-    ScopedDrmPointer<_drmModePlane, &drmModeFreePlane> p(drmModeGetPlane(m_backend->fd(), m_id));
+    ScopedDrmPointer<_drmModePlane, &drmModeFreePlane> p(drmModeGetPlane(fd(), m_id));
 
     if (!p) {
         qCWarning(KWIN_DRM) << "Failed to get kernel plane" << m_id;
@@ -63,7 +62,7 @@ bool DrmPlane::atomicInit()
 
 bool DrmPlane::initProps()
 {
-    m_propsNames = {
+    setPropertyNames( {
         QByteArrayLiteral("type"),
         QByteArrayLiteral("SRC_X"),
         QByteArrayLiteral("SRC_Y"),
@@ -75,7 +74,8 @@ bool DrmPlane::initProps()
         QByteArrayLiteral("CRTC_H"),
         QByteArrayLiteral("FB_ID"),
         QByteArrayLiteral("CRTC_ID"),
-    };
+        QByteArrayLiteral("rotation")
+    });
 
     QVector<QByteArray> typeNames = {
         QByteArrayLiteral("Primary"),
@@ -83,7 +83,16 @@ bool DrmPlane::initProps()
         QByteArrayLiteral("Overlay"),
     };
 
-    drmModeObjectProperties *properties = drmModeObjectGetProperties(m_backend->fd(), m_id, DRM_MODE_OBJECT_PLANE);
+    const QVector<QByteArray> rotationNames{
+        QByteArrayLiteral("rotate-0"),
+        QByteArrayLiteral("rotate-90"),
+        QByteArrayLiteral("rotate-180"),
+        QByteArrayLiteral("rotate-270"),
+        QByteArrayLiteral("reflect-x"),
+        QByteArrayLiteral("reflect-y")
+    };
+
+    drmModeObjectProperties *properties = drmModeObjectGetProperties(fd(), m_id, DRM_MODE_OBJECT_PLANE);
     if (!properties){
         qCWarning(KWIN_DRM) << "Failed to get properties for plane " << m_id ;
         return false;
@@ -93,6 +102,21 @@ bool DrmPlane::initProps()
     for (int j = 0; j < propCount; ++j) {
         if (j == int(PropertyIndex::Type)) {
             initProp(j, properties, typeNames);
+        } else if (j == int(PropertyIndex::Rotation)) {
+            initProp(j, properties, rotationNames);
+            m_supportedTransformations = Transformations();
+            auto testTransform = [j, this] (uint64_t value, Transformation t) {
+                if (propHasEnum(j, value)) {
+                    m_supportedTransformations |= t;
+                }
+            };
+            testTransform(0, Transformation::Rotate0);
+            testTransform(1, Transformation::Rotate90);
+            testTransform(2, Transformation::Rotate180);
+            testTransform(3, Transformation::Rotate270);
+            testTransform(4, Transformation::ReflectX);
+            testTransform(5, Transformation::ReflectY);
+            qCDebug(KWIN_DRM) << "Supported Transformations: " << m_supportedTransformations << " on plane " << m_id;
         } else {
             initProp(j, properties);
         }
@@ -104,19 +128,40 @@ bool DrmPlane::initProps()
 
 DrmPlane::TypeIndex DrmPlane::type()
 {
-    uint64_t v = value(int(PropertyIndex::Type));
+    auto property = m_props.at(int(PropertyIndex::Type));
+    if (!property) {
+        return TypeIndex::Overlay;
+    }
     int typeCount = int(TypeIndex::Count);
     for (int i = 0; i < typeCount; i++) {
-            if (m_props[int(PropertyIndex::Type)]->enumMap(i) == v) {
+            if (property->enumMap(i) == property->value()) {
                     return TypeIndex(i);
             }
     }
     return TypeIndex::Overlay;
 }
 
-void DrmPlane::setNext(DrmBuffer *b){
-    setValue(int(PropertyIndex::FbId), b ? b->bufferId() : 0);
+void DrmPlane::setNext(DrmBuffer *b)
+{
+    if (auto property = m_props.at(int(PropertyIndex::FbId))) {
+        property->setValue(b ? b->bufferId() : 0);
+    }
     m_next = b;
+}
+
+void DrmPlane::setTransformation(Transformations t)
+{
+    if (auto property = m_props.at(int(PropertyIndex::Rotation))) {
+        property->setValue(int(t));
+    }
+}
+
+DrmPlane::Transformations DrmPlane::transformation()
+{
+    if (auto property = m_props.at(int(PropertyIndex::Rotation))) {
+        return Transformations(int(property->value()));
+    }
+    return Transformations(Transformation::Rotate0);
 }
 
 bool DrmPlane::atomicPopulate(drmModeAtomicReq *req)
@@ -124,7 +169,11 @@ bool DrmPlane::atomicPopulate(drmModeAtomicReq *req)
     bool ret = true;
 
     for (int i = 1; i < m_props.size(); i++) {
-        ret &= atomicAddProperty(req, i, m_props[i]->value());
+        auto property = m_props.at(i);
+        if (!property) {
+            continue;
+        }
+        ret &= atomicAddProperty(req, property);
     }
 
     if (!ret) {

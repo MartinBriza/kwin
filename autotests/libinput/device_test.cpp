@@ -155,6 +155,12 @@ private Q_SLOTS:
     void testLoadLmrTapButtonMap();
     void testLoadLeftHanded_data();
     void testLoadLeftHanded();
+    void testScreenId();
+    void testOrientation_data();
+    void testOrientation();
+    void testCalibrationWithDefault();
+    void testSwitch_data();
+    void testSwitch();
 };
 
 void TestLibinputDevice::testStaticGetter()
@@ -205,15 +211,17 @@ void TestLibinputDevice::testDeviceType_data()
     QTest::addColumn<bool>("pointer");
     QTest::addColumn<bool>("touch");
     QTest::addColumn<bool>("tabletTool");
+    QTest::addColumn<bool>("switchDevice");
 
-    QTest::newRow("keyboard") << true << false << false << false;
-    QTest::newRow("pointer") << false << true << false << false;
-    QTest::newRow("touch") << false << false << true << false;
-    QTest::newRow("keyboard/pointer") << true << true << false << false;
-    QTest::newRow("keyboard/touch") << true << false << true << false;
-    QTest::newRow("pointer/touch") << false << true << true << false;
-    QTest::newRow("keyboard/pointer/touch") << true << true << true << false;
-    QTest::newRow("tabletTool") << false << false << false << true;
+    QTest::newRow("keyboard") << true << false << false << false << false;
+    QTest::newRow("pointer") << false << true << false << false << false;
+    QTest::newRow("touch") << false << false << true << false << false;
+    QTest::newRow("keyboard/pointer") << true << true << false << false << false;
+    QTest::newRow("keyboard/touch") << true << false << true << false << false;
+    QTest::newRow("pointer/touch") << false << true << true << false << false;
+    QTest::newRow("keyboard/pointer/touch") << true << true << true << false << false;
+    QTest::newRow("tabletTool") << false << false << false << true << false;
+    QTest::newRow("switch") << false << false << false << false << true;
 }
 
 void TestLibinputDevice::testDeviceType()
@@ -223,12 +231,14 @@ void TestLibinputDevice::testDeviceType()
     QFETCH(bool, pointer);
     QFETCH(bool, touch);
     QFETCH(bool, tabletTool);
+    QFETCH(bool, switchDevice);
 
     libinput_device device;
     device.keyboard = keyboard;
     device.pointer = pointer;
     device.touch = touch;
     device.tabletTool = tabletTool;
+    device.switchDevice = switchDevice;
 
     Device d(&device);
     QCOMPARE(d.isKeyboard(), keyboard);
@@ -241,6 +251,8 @@ void TestLibinputDevice::testDeviceType()
     QCOMPARE(d.property("tabletPad").toBool(), false);
     QCOMPARE(d.isTabletTool(), tabletTool);
     QCOMPARE(d.property("tabletTool").toBool(), tabletTool);
+    QCOMPARE(d.isSwitch(), switchDevice);
+    QCOMPARE(d.property("switchDevice").toBool(), switchDevice);
 
     QCOMPARE(d.device(), &device);
 }
@@ -2093,6 +2105,93 @@ void TestLibinputDevice::testLoadLmrTapButtonMap()
         d.setLmrTapButtonMap(initValue);
         QCOMPARE(inputConfig.readEntry("LmrTapButtonMap", configValue), initValue);
     }
+}
+
+void TestLibinputDevice::testScreenId()
+{
+    libinput_device device;
+    Device d(&device);
+    QCOMPARE(d.screenId(), 0);
+    d.setScreenId(1);
+    QCOMPARE(d.screenId(), 1);
+}
+
+void TestLibinputDevice::testOrientation_data()
+{
+    QTest::addColumn<Qt::ScreenOrientation>("orientation");
+    QTest::addColumn<float>("m11");
+    QTest::addColumn<float>("m12");
+    QTest::addColumn<float>("m13");
+    QTest::addColumn<float>("m21");
+    QTest::addColumn<float>("m22");
+    QTest::addColumn<float>("m23");
+    QTest::addColumn<bool>("defaultIsIdentity");
+
+    QTest::newRow("Primary") << Qt::PrimaryOrientation << 1.0f << 2.0f << 3.0f << 4.0f << 5.0f << 6.0f << false;
+    QTest::newRow("Landscape") << Qt::LandscapeOrientation << 1.0f << 2.0f << 3.0f << 4.0f << 5.0f << 6.0f << false;
+    QTest::newRow("Portrait") << Qt::PortraitOrientation << 0.0f << -1.0f << 1.0f << 1.0f << 0.0f << 0.0f << true;
+    QTest::newRow("InvertedLandscape") << Qt::InvertedLandscapeOrientation << -1.0f << 0.0f << 1.0f << 0.0f << -1.0f << 1.0f << true;
+    QTest::newRow("InvertedPortrait") << Qt::InvertedPortraitOrientation << 0.0f << 1.0f << 0.0f << -1.0f << 0.0f << 1.0f << true;
+}
+
+void TestLibinputDevice::testOrientation()
+{
+    libinput_device device;
+    device.supportsCalibrationMatrix = true;
+    device.defaultCalibrationMatrix = std::array<float, 6>{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}};
+    QFETCH(bool, defaultIsIdentity);
+    device.defaultCalibrationMatrixIsIdentity = defaultIsIdentity;
+    Device d(&device);
+    QFETCH(Qt::ScreenOrientation, orientation);
+    d.setOrientation(orientation);
+    QTEST(device.calibrationMatrix[0], "m11");
+    QTEST(device.calibrationMatrix[1], "m12");
+    QTEST(device.calibrationMatrix[2], "m13");
+    QTEST(device.calibrationMatrix[3], "m21");
+    QTEST(device.calibrationMatrix[4], "m22");
+    QTEST(device.calibrationMatrix[5], "m23");
+}
+
+void TestLibinputDevice::testCalibrationWithDefault()
+{
+    libinput_device device;
+    device.supportsCalibrationMatrix = true;
+    device.defaultCalibrationMatrix = std::array<float, 6>{{2.0, 3.0, 0.0, 4.0, 5.0, 0.0}};
+    device.defaultCalibrationMatrixIsIdentity = false;
+    Device d(&device);
+    d.setOrientation(Qt::PortraitOrientation);
+    QCOMPARE(device.calibrationMatrix[0], 3.0f);
+    QCOMPARE(device.calibrationMatrix[1], -2.0f);
+    QCOMPARE(device.calibrationMatrix[2], 2.0f);
+    QCOMPARE(device.calibrationMatrix[3], 5.0f);
+    QCOMPARE(device.calibrationMatrix[4], -4.0f);
+    QCOMPARE(device.calibrationMatrix[5], 4.0f);
+}
+
+void TestLibinputDevice::testSwitch_data()
+{
+    QTest::addColumn<bool>("lid");
+    QTest::addColumn<bool>("tablet");
+
+    QTest::newRow("lid") << true << false;
+    QTest::newRow("tablet") << false << true;
+}
+
+void TestLibinputDevice::testSwitch()
+{
+    libinput_device device;
+    device.switchDevice = true;
+    QFETCH(bool, lid);
+    QFETCH(bool, tablet);
+    device.lidSwitch = lid;
+    device.tabletModeSwitch = tablet;
+
+    Device d(&device);
+    QCOMPARE(d.isSwitch(), true);
+    QCOMPARE(d.isLidSwitch(), lid);
+    QCOMPARE(d.property("lidSwitch").toBool(), lid);
+    QCOMPARE(d.isTabletModeSwitch(), tablet);
+    QCOMPARE(d.property("tabletModeSwitch").toBool(), tablet);
 }
 
 QTEST_GUILESS_MAIN(TestLibinputDevice)

@@ -47,6 +47,7 @@ class PointerConstraintsFilter;
 class PointerInputRedirection;
 class TouchInputRedirection;
 class WindowSelectorFilter;
+class SwitchEvent;
 
 namespace Decoration
 {
@@ -217,6 +218,7 @@ public:
     }
 
     bool hasAlphaNumericKeyboard();
+    bool hasTabletModeSwitch();
 
     void startInteractiveWindowSelection(std::function<void(KWin::Toplevel*)> callback, const QByteArray &cursorName);
     void startInteractivePositionSelection(std::function<void(const QPoint &)> callback);
@@ -264,6 +266,7 @@ Q_SIGNALS:
     void keyStateChanged(quint32 keyCode, InputRedirection::KeyboardKeyState state);
 
     void hasAlphaNumericKeyboardChanged(bool set);
+    void hasTabletModeSwitchChanged(bool set);
 
 private:
     void setupLibInput();
@@ -359,6 +362,8 @@ public:
     virtual bool swipeGestureUpdate(const QSizeF &delta, quint32 time);
     virtual bool swipeGestureEnd(quint32 time);
     virtual bool swipeGestureCancelled(quint32 time);
+
+    virtual bool switchEvent(SwitchEvent *event);
 
 protected:
     void passToWaylandServer(QKeyEvent *event);

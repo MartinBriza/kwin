@@ -40,8 +40,6 @@
 
 #include "version.h"
 
-K_PLUGIN_FACTORY_DECLARATION(KcmKWinScriptsFactory)
-
 Module::Module(QWidget *parent, const QVariantList &args) :
     KCModule(parent, args),
     ui(new Ui::Module),
@@ -165,5 +163,3 @@ void Module::save()
 
     emit changed(false);
 }
-
-#include "module.moc"

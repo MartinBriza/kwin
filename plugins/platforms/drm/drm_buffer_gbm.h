@@ -30,13 +30,12 @@ struct gbm_bo;
 namespace KWin
 {
 
-class DrmBackend;
 class GbmSurface;
 
 class DrmSurfaceBuffer : public DrmBuffer
 {
 public:
-    DrmSurfaceBuffer(DrmBackend *backend, const std::shared_ptr<GbmSurface> &surface);
+    DrmSurfaceBuffer(int fd, const std::shared_ptr<GbmSurface> &surface);
     ~DrmSurfaceBuffer();
 
     bool needsModeChange(DrmBuffer *b) const override {

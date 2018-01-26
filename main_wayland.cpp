@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // kwin
 #include "platform.h"
 #include "effects.h"
+#include "tabletmodemanager.h"
 #include "wayland_server.h"
 #include "xcbutils.h"
 
@@ -35,6 +36,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <KLocalizedString>
 #include <KPluginLoader>
 #include <KPluginMetaData>
+#include <KQuickAddons/QtQuickSettings>
+
 // Qt
 #include <qplatformdefs.h>
 #include <QAbstractEventDispatcher>
@@ -81,6 +84,28 @@ static void sighandler(int)
 }
 
 static void readDisplay(int pipe);
+
+enum class RealTimeFlags
+{
+    DontReset,
+    ResetOnFork
+};
+
+namespace {
+void gainRealTime(RealTimeFlags flags = RealTimeFlags::DontReset)
+{
+#if HAVE_SCHED_RESET_ON_FORK
+    const int minPriority = sched_get_priority_min(SCHED_RR);
+    struct sched_param sp;
+    sp.sched_priority = minPriority;
+    int policy = SCHED_RR;
+    if (flags == RealTimeFlags::ResetOnFork) {
+        policy |= SCHED_RESET_ON_FORK;
+    }
+    sched_setscheduler(0, policy, &sp);
+#endif
+}
+}
 
 //************************************
 // ApplicationWayland
@@ -139,8 +164,12 @@ void ApplicationWayland::performStartup()
 
     // try creating the Wayland Backend
     createInput();
+    // now libinput thread has been created, adjust scheduler to not leak into other processes
+    gainRealTime(RealTimeFlags::ResetOnFork);
+
     VirtualKeyboard::create(this);
     createBackend();
+    TabletModeManager::create(this);
 }
 
 void ApplicationWayland::createBackend()
@@ -460,16 +489,6 @@ static void unsetDumpable(int sig)
     return;
 }
 
-void gainRealTime()
-{
-#if HAVE_SCHED_RESET_ON_FORK
-    const int minPriority = sched_get_priority_min(SCHED_RR);
-    struct sched_param sp;
-    sp.sched_priority = minPriority;
-    sched_setscheduler(0, SCHED_RR | SCHED_RESET_ON_FORK, &sp);
-#endif
-}
-
 void dropNiceCapability()
 {
 #if HAVE_LIBCAP
@@ -532,6 +551,7 @@ int main(int argc, char * argv[])
     setenv("QT_QPA_PLATFORM", "wayland", true);
 
     KWin::Application::createAboutData();
+    KQuickAddons::QtQuickSettings::init();
 
     const auto availablePlugins = KPluginLoader::findPlugins(QStringLiteral("org.kde.kwin.waylandbackends"));
     auto hasPlugin = [&availablePlugins] (const QString &name) {
@@ -658,12 +678,6 @@ int main(int argc, char * argv[])
                                              QStringLiteral("/path/to/session"));
     parser.addOption(exitWithSessionOption);
 
-#ifdef KWIN_BUILD_ACTIVITIES
-    QCommandLineOption noActivitiesOption(QStringLiteral("no-kactivities"),
-                                        i18n("Disable KActivities integration."));
-    parser.addOption(noActivitiesOption);
-#endif
-
     parser.addPositionalArgument(QStringLiteral("applications"),
                                  i18n("Applications to start once Wayland and Xwayland server are started"),
                                  QStringLiteral("[/path/to/application...]"));
@@ -672,9 +686,7 @@ int main(int argc, char * argv[])
     a.processCommandLine(&parser);
 
 #ifdef KWIN_BUILD_ACTIVITIES
-    if (parser.isSet(noActivitiesOption)) {
-        a.setUseKActivities(false);
-    }
+    a.setUseKActivities(false);
 #endif
 
     if (parser.isSet(listBackendsOption)) {

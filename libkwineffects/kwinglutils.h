@@ -419,6 +419,12 @@ class KWINGLUTILS_EXPORT GLRenderTarget
 public:
     /**
      * Constructs a GLRenderTarget
+     * @since 5.13
+     **/
+    explicit GLRenderTarget();
+
+    /**
+     * Constructs a GLRenderTarget
      * @param color texture where the scene will be rendered onto
      **/
     explicit GLRenderTarget(const GLTexture& color);
@@ -443,14 +449,32 @@ public:
      **/
     void attachTexture(const GLTexture& target);
 
+    /**
+     * Detaches the texture that is currently attached to this framebuffer object.
+     * @since 5.13
+     **/
+    void detachTexture();
+
     bool valid() const  {
         return mValid;
+    }
+
+    void setTextureDirty() {
+        mTexture.setDirty();
     }
 
     static void initStatic();
     static bool supported()  {
         return sSupported;
     }
+
+    /**
+     * Pushes the render target stack of the input parameter in reverse order.
+     * @param targets The stack of GLRenderTargets
+     * @since 5.13
+     **/
+    static void pushRenderTargets(QStack <GLRenderTarget*> targets);
+
     static void pushRenderTarget(GLRenderTarget *target);
     static GLRenderTarget *popRenderTarget();
     static bool isRenderTargetBound();
@@ -775,9 +799,21 @@ public:
         s_virtualScreenGeometry = g;
     }
 
+    /**
+     * The scale of the OpenGL window currently being rendered to
+     *
+     * @returns the ratio between the virtual geometry space the rendering
+     * system uses and the target
+     * @since 5.11.3
+     */
+    static void setVirtualScreenScale(qreal s) {
+        s_virtualScreenScale = s;
+    }
+
 private:
     GLVertexBufferPrivate* const d;
     static QRect s_virtualScreenGeometry;
+    static qreal s_virtualScreenScale;
 };
 
 } // namespace

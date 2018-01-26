@@ -19,7 +19,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *********************************************************************/
 #include "drm_object.h"
 
-#include "drm_backend.h"
 #include "logging.h"
 
 namespace KWin
@@ -29,8 +28,8 @@ namespace KWin
  * Defintions for class DrmObject
  */
 
-DrmObject::DrmObject(uint32_t object_id, DrmBackend *backend)
-    : m_backend(backend)
+DrmObject::DrmObject(uint32_t object_id, int fd)
+    : m_fd(fd)
     , m_id(object_id)
 {
 }
@@ -41,11 +40,16 @@ DrmObject::~DrmObject()
         delete p;
 }
 
+void DrmObject::setPropertyNames(QVector<QByteArray> &&vector)
+{
+    m_propsNames = std::move(vector);
+    m_props.fill(nullptr, m_propsNames.size());
+}
+
 void DrmObject::initProp(int n, drmModeObjectProperties *properties, QVector<QByteArray> enumNames)
 {
-    m_props.resize(m_propsNames.size());
     for (unsigned int i = 0; i < properties->count_props; ++i) {
-        drmModePropertyRes *prop = drmModeGetProperty(m_backend->fd(), properties->props[i]);
+        drmModePropertyRes *prop = drmModeGetProperty(fd(), properties->props[i]);
         if (!prop) {
             continue;
         }
@@ -58,10 +62,10 @@ void DrmObject::initProp(int n, drmModeObjectProperties *properties, QVector<QBy
     }
 }
 
-bool DrmObject::atomicAddProperty(drmModeAtomicReq *req, int prop, uint64_t value)
+bool DrmObject::atomicAddProperty(drmModeAtomicReq *req, Property *property)
 {
-    if (drmModeAtomicAddProperty(req, m_id, m_props[prop]->propId(), value) <= 0) {
-        qCWarning(KWIN_DRM) << "Adding property" << m_propsNames[prop] << "to atomic commit failed for object" << this;
+    if (drmModeAtomicAddProperty(req, m_id, property->propId(), property->value()) <= 0) {
+        qCWarning(KWIN_DRM) << "Adding property" << property->name() << "to atomic commit failed for object" << this;
         return false;
     }
     return true;
@@ -72,7 +76,11 @@ bool DrmObject::atomicPopulate(drmModeAtomicReq *req)
     bool ret = true;
 
     for (int i = 0; i < m_props.size(); i++) {
-        ret &= atomicAddProperty(req, i, m_props[i]->value());
+        auto property = m_props.at(i);
+        if (!property) {
+            continue;
+        }
+        ret &= atomicAddProperty(req, property);
     }
 
     if (!ret) {
@@ -102,7 +110,7 @@ DrmObject::Property::~Property() = default;
 
 void DrmObject::Property::initEnumMap(drmModePropertyRes *prop)
 {
-    if (!(prop->flags & DRM_MODE_PROP_ENUM) || prop->count_enums < 1) {
+    if (!((prop->flags & DRM_MODE_PROP_ENUM) || (prop->flags & DRM_MODE_PROP_BITMASK)) || prop->count_enums < 1) {
         qCWarning(KWIN_DRM) << "Property '" << prop->name << "' ( id ="
                           << m_propId << ") should be enum valued, but it is not.";
         return;

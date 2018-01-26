@@ -403,6 +403,7 @@ void Scene::windowAdded(Toplevel *c)
     if (c->surface()) {
         connect(c->surface(), &KWayland::Server::SurfaceInterface::scaleChanged, this, std::bind(&Scene::windowGeometryShapeChanged, this, c));
     }
+    connect(c, &Toplevel::screenScaleChanged, std::bind(&Scene::windowGeometryShapeChanged, this, c));
     c->effectWindow()->setSceneWindow(w);
     c->getShadow();
     w->updateShadow(c->shadow());
@@ -851,22 +852,23 @@ WindowQuadList Scene::Window::buildQuads(bool force) const
         QRegion contents = clientShape();
         QRegion center = toplevel->transparentRect();
         QRegion decoration = (client ? QRegion(client->decorationRect()) : shape()) - center;
+        qreal decorationScale = 1.0;
         ret = makeQuads(WindowQuadContents, contents, toplevel->clientContentPos(), scale);
-
 
         QRect rects[4];
         bool isShadedClient = false;
 
         if (client) {
             client->layoutDecorationRects(rects[0], rects[1], rects[2], rects[3]);
+            decorationScale = client->screenScale();
             isShadedClient = client->isShade() || center.isEmpty();
         }
 
         if (isShadedClient) {
             const QRect bounding = rects[0] | rects[1] | rects[2] | rects[3];
-            ret += makeDecorationQuads(rects, bounding);
+            ret += makeDecorationQuads(rects, bounding, decorationScale);
         } else {
-            ret += makeDecorationQuads(rects, decoration);
+            ret += makeDecorationQuads(rects, decoration, decorationScale);
         }
 
     }
@@ -878,7 +880,7 @@ WindowQuadList Scene::Window::buildQuads(bool force) const
     return ret;
 }
 
-WindowQuadList Scene::Window::makeDecorationQuads(const QRect *rects, const QRegion &region) const
+WindowQuadList Scene::Window::makeDecorationQuads(const QRect *rects, const QRegion &region, qreal textureScale) const
 {
     WindowQuadList list;
 
@@ -897,7 +899,8 @@ WindowQuadList Scene::Window::makeDecorationQuads(const QRect *rects, const QReg
     };
 
     for (int i = 0; i < 4; i++) {
-        foreach (const QRect &r, (region & rects[i]).rects()) {
+        const QRegion intersectedRegion = (region & rects[i]);
+        for (const QRect &r : intersectedRegion) {
             if (!r.isValid())
                 continue;
 
@@ -908,10 +911,10 @@ WindowQuadList Scene::Window::makeDecorationQuads(const QRect *rects, const QReg
             const int x1 = r.x() + r.width();
             const int y1 = r.y() + r.height();
 
-            const int u0 = x0 + offsets[i].x();
-            const int v0 = y0 + offsets[i].y();
-            const int u1 = x1 + offsets[i].x();
-            const int v1 = y1 + offsets[i].y();
+            const int u0 = (x0 + offsets[i].x()) * textureScale;
+            const int v0 = (y0 + offsets[i].y()) * textureScale;
+            const int u1 = (x1 + offsets[i].x()) * textureScale;
+            const int v1 = (y1 + offsets[i].y()) * textureScale;
 
             WindowQuad quad(WindowQuadDecoration);
             quad.setUVAxisSwapped(swap);
@@ -938,7 +941,8 @@ WindowQuadList Scene::Window::makeDecorationQuads(const QRect *rects, const QReg
 WindowQuadList Scene::Window::makeQuads(WindowQuadType type, const QRegion& reg, const QPoint &textureOffset, qreal scale) const
 {
     WindowQuadList ret;
-    foreach (const QRect & r, reg.rects()) {
+    ret.reserve(reg.rectCount());
+    for (const QRect &r : reg) {
         WindowQuad quad(type);
         // TODO asi mam spatne pravy dolni roh - bud tady, nebo v jinych castech
         quad[ 0 ] = WindowVertex(QPointF(r.x(), r.y()),

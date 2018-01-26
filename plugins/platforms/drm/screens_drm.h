@@ -41,6 +41,9 @@ public:
     float refreshRate(int screen) const override;
 
     QSizeF physicalSize(int screen) const override;
+    bool isInternal(int screen) const override;
+    bool supportsTransformations(int screen) const override;
+    Qt::ScreenOrientation orientation(int screen) const override;
 
 private:
     DrmBackend *m_backend;

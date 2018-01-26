@@ -30,6 +30,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "scene.h"
 #include "screenedge.h"
 #include "wayland_server.h"
+#include "colorcorrection/manager.h"
+
 #include <KWayland/Server/outputconfiguration_interface.h>
 
 namespace KWin
@@ -39,6 +41,7 @@ Platform::Platform(QObject *parent)
     : QObject(parent)
     , m_eglDisplay(EGL_NO_DISPLAY)
 {
+     m_colorCorrect = new ColorCorrect::Manager(this);
 }
 
 Platform::~Platform()
@@ -475,6 +478,11 @@ void Platform::invertScreen()
 void Platform::createEffectsHandler(Compositor *compositor, Scene *scene)
 {
     new EffectsHandlerImpl(compositor, scene);
+}
+
+QString Platform::supportInformation() const
+{
+    return QStringLiteral("Name: %1\n").arg(metaObject()->className());
 }
 
 }
